@@ -1,13 +1,76 @@
-"""Tool registry and stream event types shared across the codebase."""
+"""Tool ABC, ToolResult, stream events, and shared constants."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any, Literal
+
+# ──────────────────────────────────────────────
+#  Shared constants
+# ──────────────────────────────────────────────
+
+SKIP_DIRS = {".git", ".venv", "node_modules", "__pycache__", ".tox", ".mypy_cache"}
+
+MAX_OUTPUT_CHARS = 10000
+
+ToolCategory = Literal["read", "write", "command"]
 
 
 # ──────────────────────────────────────────────
-# Stream event types — used by LLMClient.stream()
+#  ToolResult
+# ──────────────────────────────────────────────
+
+@dataclass
+class ToolResult:
+    output: str
+    is_error: bool = False
+
+
+# ──────────────────────────────────────────────
+#  Tool ABC
+# ──────────────────────────────────────────────
+
+class Tool(ABC):
+    """Unified base for every tool in the system.
+
+    Subclasses declare class-level metadata and implement ``execute``.
+    ``params_model`` is a Pydantic ``BaseModel`` subclass; its
+    ``model_json_schema()`` drives automatic schema generation.
+    """
+
+    # ── class-level metadata ───────────────────
+    name: str = ""
+    description: str = ""
+    params_model: type[Any] = type(None)  # Pydantic BaseModel
+    category: ToolCategory = "read"
+    is_concurrency_safe: bool = False
+    is_system_tool: bool = False
+    should_defer: bool = False
+
+    @property
+    def is_read_only(self) -> bool:
+        return self.category == "read"
+
+    def get_schema(self) -> dict[str, Any]:
+        """Return JSON Schema from Pydantic params model."""
+        try:
+            raw = self.params_model.model_json_schema()
+        except Exception:
+            return {"type": "object", "properties": {}}
+        # Remove Pydantic noise
+        raw.pop("title", None)
+        raw.pop("$defs", None)
+        return raw
+
+    @abstractmethod
+    async def execute(self, params: Any) -> ToolResult:
+        """Execute the tool with validated *params*."""
+        ...
+
+
+# ──────────────────────────────────────────────
+#  Stream event types — used by LLMClient.stream()
 # ──────────────────────────────────────────────
 
 @dataclass
@@ -60,64 +123,3 @@ class StreamEnd:
 
 
 StreamEvent = TextDelta | ThinkingDelta | ThinkingComplete | ToolCallStart | ToolCallDelta | ToolCallComplete | StreamEnd
-
-
-# ──────────────────────────────────────────────
-# Tool registry
-# ──────────────────────────────────────────────
-
-@dataclass
-class ToolParam:
-    name: str
-    type: str
-    description: str
-    required: bool = False
-    enum: Optional[list[str]] = None
-
-
-@dataclass
-class ToolDefinition:
-    name: str
-    description: str
-    parameters: list[ToolParam] = field(default_factory=list)
-
-    def to_schema(self, protocol: str = "anthropic") -> dict[str, Any]:
-        props: dict[str, Any] = {}
-        required: list[str] = []
-        for p in self.parameters:
-            prop: dict[str, Any] = {"type": p.type, "description": p.description}
-            if p.enum:
-                prop["enum"] = p.enum
-            props[p.name] = prop
-            if p.required:
-                required.append(p.name)
-        schema: dict[str, Any] = {
-            "name": self.name,
-            "description": self.description,
-            "input_schema": {
-                "type": "object",
-                "properties": props,
-            },
-        }
-        if required:
-            schema["input_schema"]["required"] = required
-        return schema
-
-
-class ToolRegistry:
-    """Central registry for tools available to the agent."""
-
-    def __init__(self) -> None:
-        self._tools: dict[str, ToolDefinition] = {}
-
-    def register(self, tool: ToolDefinition) -> None:
-        self._tools[tool.name] = tool
-
-    def get(self, name: str) -> Optional[ToolDefinition]:
-        return self._tools.get(name)
-
-    def list_schemas(self, protocol: str = "anthropic") -> list[dict[str, Any]]:
-        return [t.to_schema(protocol) for t in self._tools.values()]
-
-    def __len__(self) -> int:
-        return len(self._tools)

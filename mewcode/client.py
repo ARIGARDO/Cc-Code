@@ -273,12 +273,24 @@ class OpenAIClient(LLMClient):
                 elif event.type == "response.output_item.added":
                     item = event.item
                     if item.type == "function_call":
-                        active_tools[item.call_id] = {
-                            "call_id": item.call_id,
-                            "tool_name": item.name,
-                            "json_accum": "",
-                            "started": False,
-                        }
+                        existing = active_tools.get(item.id)
+                        if existing is not None and existing.get("tool_name", "") == "":
+                            # Delta arrived first — update name and flush buffered deltas
+                            existing["tool_name"] = item.name
+                            if not existing["started"]:
+                                existing["started"] = True
+                                yield ToolCallStart(
+                                    tool_id=item.id, tool_name=item.name
+                                )
+                            for d in existing.pop("buffered_deltas", []):
+                                yield d
+                        else:
+                            active_tools[item.id] = {
+                                "call_id": item.id,
+                                "tool_name": item.name,
+                                "json_accum": "",
+                                "started": False,
+                            }
 
                 elif event.type == "response.function_call_arguments.delta":
                     call_id = event.item_id
@@ -289,28 +301,47 @@ class OpenAIClient(LLMClient):
                             "tool_name": "",
                             "json_accum": "",
                             "started": False,
+                            "buffered_deltas": [],
                         }
                         active_tools[call_id] = entry
-                    if not entry["started"]:
-                        entry["started"] = True
-                        yield ToolCallStart(
-                            tool_id=call_id, tool_name=entry["tool_name"]
-                        )
+
+                    delta_event = ToolCallDelta(tool_id=call_id, delta=event.delta)
+
+                    if entry["tool_name"]:
+                        # Name is known — yield immediately
+                        if not entry["started"]:
+                            entry["started"] = True
+                            yield ToolCallStart(
+                                tool_id=call_id, tool_name=entry["tool_name"]
+                            )
+                        yield delta_event
+                    else:
+                        # Name unknown — buffer until output_item.added arrives
+                        entry["buffered_deltas"].append(delta_event)
+
                     entry["json_accum"] += event.delta
-                    yield ToolCallDelta(tool_id=call_id, delta=event.delta)
 
                 elif event.type == "response.function_call_arguments.done":
                     call_id = event.item_id
                     entry = active_tools.pop(call_id, None)
                     if entry is None:
                         continue
+                    # Flush buffered deltas and ToolCallStart if name was never received
+                    if not entry["started"]:
+                        entry["started"] = True
+                        yield ToolCallStart(
+                            tool_id=call_id,
+                            tool_name=entry["tool_name"] or "calling",
+                        )
+                    for d in entry.pop("buffered_deltas", []):
+                        yield d
                     try:
                         args = json.loads(entry["json_accum"])
                     except json.JSONDecodeError:
                         args = {}
                     yield ToolCallComplete(
                         tool_id=call_id,
-                        tool_name=entry["tool_name"],
+                        tool_name=entry["tool_name"] or "calling",
                         arguments=args,
                     )
 

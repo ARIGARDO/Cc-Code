@@ -13,6 +13,7 @@ from mewcode.conversation import (
     ToolUseBlock,
 )
 from mewcode.tools.base import (
+    MAX_OUTPUT_CHARS,
     StreamEnd,
     StreamEvent,
     TextDelta,
@@ -21,6 +22,7 @@ from mewcode.tools.base import (
     ToolCallComplete,
     ToolCallDelta,
     ToolCallStart,
+    ToolResult,
 )
 
 
@@ -61,6 +63,34 @@ AgentEvent = StreamText | ThinkingText | ToolUseStart | ToolUseDelta | ToolUseCo
 
 
 # ──────────────────────────────────────────────
+#  partition_tool_calls (F5 / checklist)
+# ──────────────────────────────────────────────
+
+def partition_tool_calls(
+    tool_uses: list[ToolUseBlock], registry: Any
+) -> list[list[ToolUseBlock]]:
+    """Group consecutive concurrency-safe tool calls into batches."""
+    batches: list[list[ToolUseBlock]] = []
+    current_batch: list[ToolUseBlock] = []
+
+    for tu in tool_uses:
+        tool = registry.get(tu.name)
+        safe = tool.is_concurrency_safe if tool else False
+        if not safe:
+            if current_batch:
+                batches.append(current_batch)
+                current_batch = []
+            batches.append([tu])
+        else:
+            current_batch.append(tu)
+
+    if current_batch:
+        batches.append(current_batch)
+
+    return batches
+
+
+# ──────────────────────────────────────────────
 #  StreamCollector — consumes LLM stream events
 # ──────────────────────────────────────────────
 
@@ -88,7 +118,7 @@ class StreamCollector:
     async def consume(
         self, stream: AsyncIterator[StreamEvent]
     ) -> AsyncGenerator[AgentEvent, None]:
-        pending_tools: dict[str, tuple[str, str]] = {}  # id -> (name, json_accum)
+        pending_tools: dict[str, tuple[str, str]] = {}
 
         async for event in stream:
             if isinstance(event, TextDelta):
@@ -151,8 +181,8 @@ class StreamCollector:
 class Agent:
     """Orchestrates the LLM ↔ tool loop.
 
-    Consumes an LLMClient + ConversationManager, drives streaming turns,
-    and handles tool execution callbacks.
+    Consumes an LLMClient + ToolRegistry, drives streaming turns,
+    handles tool execution, and writes results back into conversation history.
     """
 
     MAX_TURNS = 50
@@ -162,14 +192,16 @@ class Agent:
         self,
         client: Any,
         conversation: ConversationManager,
+        registry: Any = None,
         *,
-        tools: Optional[list[dict[str, Any]]] = None,
         system: Optional[str] = None,
+        protocol: str = "anthropic",
     ) -> None:
         self.client = client
         self.conversation = conversation
-        self._tools = tools
+        self._registry = registry
         self._system = system
+        self.protocol = protocol
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self._turn_count = 0
@@ -178,9 +210,22 @@ class Agent:
         for _ in range(self.MAX_TURNS):
             self._turn_count += 1
 
+            # Build tool schemas for this turn
+            tools: Optional[list[dict[str, Any]]] = None
+            if self._registry is not None:
+                tools = self._registry.get_all_schemas(self.protocol)
+                # Inject deferred tool names as system reminder
+                deferred = self._registry.get_deferred_tool_names()
+                if deferred:
+                    reminder = (
+                        "Additional tools available via ToolSearch: "
+                        + ", ".join(deferred)
+                    )
+                    self.conversation.add_system_reminder(reminder)
+
             collector = StreamCollector()
             stream = self.client.stream(
-                self.conversation, system=self._system, tools=self._tools
+                self.conversation, system=self._system, tools=tools
             )
 
             async for agent_event in collector.consume(stream):
@@ -201,10 +246,10 @@ class Agent:
             if not response.tool_uses:
                 break
 
-            # Execute tools and add results
+            # Execute tools (sequential for now, partition for concurrent-safe)
             results: list[ToolResultBlock] = []
             for tu in response.tool_uses:
-                result = await self._execute_tool(tu)
+                result = await self._execute_single_tool(tu)
                 results.append(result)
 
             self.conversation.add_tool_results_message(results)
@@ -216,13 +261,48 @@ class Agent:
                     new_tokens = min(current * 2, self.MAX_TOKENS_CEILING)
                     self.client.set_max_output_tokens(new_tokens)
 
-    async def _execute_tool(self, tool_use: ToolUseBlock) -> ToolResultBlock:
-        import json as _json
+    async def _execute_single_tool(self, tool_use: ToolUseBlock) -> ToolResultBlock:
+        """Execute one tool via the registry with Pydantic validation."""
+        if self._registry is None:
+            return ToolResultBlock(
+                tool_use_id=tool_use.id,
+                content="Error: no tool registry configured",
+                is_error=True,
+            )
 
-        # In a real implementation this dispatches through ToolRegistry.
-        # For ch02 we stub it — tools are validated via integration tests.
+        tool = self._registry.get(tool_use.name)
+        if tool is None:
+            return ToolResultBlock(
+                tool_use_id=tool_use.id,
+                content=f'Error: unknown tool "{tool_use.name}"',
+                is_error=True,
+            )
+
+        try:
+            params = tool.params_model.model_validate(tool_use.arguments)
+        except Exception as e:
+            return ToolResultBlock(
+                tool_use_id=tool_use.id,
+                content=f"Error: invalid arguments for {tool_use.name}: {e}",
+                is_error=True,
+            )
+
+        try:
+            result: ToolResult = await tool.execute(params)
+        except Exception as e:
+            return ToolResultBlock(
+                tool_use_id=tool_use.id,
+                content=f"Error executing {tool_use.name}: {e}",
+                is_error=True,
+            )
+
+        # Apply output limit
+        output = result.output
+        if len(output) > MAX_OUTPUT_CHARS:
+            output = output[:MAX_OUTPUT_CHARS] + f"\n... (truncated at {MAX_OUTPUT_CHARS} chars)"
+
         return ToolResultBlock(
             tool_use_id=tool_use.id,
-            content=_json.dumps({"status": "ok", "args": tool_use.arguments}),
-            is_error=False,
+            content=output,
+            is_error=result.is_error,
         )

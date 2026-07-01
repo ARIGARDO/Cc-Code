@@ -1,6 +1,6 @@
 """MewCode TUI application.
 
-Wires together provider selection, LLM client, Agent, and the Textual UI.
+Wires together provider selection, LLM client, Agent, ToolRegistry, and the Textual UI.
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Optional
 
+from mewcode.cache import FileCache
 from mewcode.client import (
     AuthenticationError,
     LLMError,
@@ -16,16 +17,20 @@ from mewcode.client import (
 from mewcode.config import ProviderConfig
 from mewcode.conversation import ConversationManager
 from mewcode.agent import Agent
+from mewcode.tools import ToolRegistry, create_default_registry
 
 
 class MewCodeApp:
-    """Top-level application that owns the TUI, client, and agent lifecycle."""
+    """Top-level application that owns the TUI, client, registry, and agent lifecycle."""
 
     def __init__(self, config: dict[str, Any]) -> None:
         self._config = config
         self.client: Any = None
         self.agent: Optional[Agent] = None
         self.conversation = ConversationManager()
+        self.file_cache = FileCache()
+        self.registry: ToolRegistry = create_default_registry(file_cache=self.file_cache)
+        self._provider: Optional[ProviderConfig] = None
 
     def _select_provider(self) -> None:
         """Choose the first configured provider and create its client."""
@@ -43,6 +48,7 @@ class MewCodeApp:
             model=provider_data.get("model", "claude-sonnet-4-6"),
             thinking=provider_data.get("thinking", True),
         )
+        self._provider = provider
 
         try:
             self.client = create_client(provider)
@@ -58,11 +64,21 @@ class MewCodeApp:
         if self.client is None:
             return
 
+        protocol = self._provider.protocol if self._provider else "anthropic"
+
+        # Register deferred / system tools
+        from mewcode.tools.impl.tool_search import ToolSearchTool
+        from mewcode.tools.ask_user import AskUserTool
+
+        self.registry.register(ToolSearchTool(self.registry, protocol=protocol))
+        self.registry.register(AskUserTool())
+
         self.agent = Agent(
             client=self.client,
             conversation=self.conversation,
+            registry=self.registry,
             system="You are MewCode, a terminal AI coding assistant.",
-            tools=None,
+            protocol=protocol,
         )
 
     async def process_message(self, user_input: str) -> None:
@@ -81,15 +97,32 @@ class MewCodeApp:
 
     def _render_event(self, event: Any) -> None:
         """Render a single agent event to the terminal (TUI binding point)."""
-        from mewcode.agent import StreamText, ThinkingText
+        from mewcode.agent import (
+            StreamText,
+            ThinkingText,
+            ToolUseStart,
+            ToolUseDelta,
+            ToolUseComplete,
+        )
 
         if isinstance(event, StreamText):
             print(event.text, end="", flush=True)
         elif isinstance(event, ThinkingText):
-            # In TUI this renders in a dim/spinner panel; for now print dimmed
             print(f"\033[2m{event.text}\033[0m", end="", flush=True)
-        # ToolUseStart / ToolUseDelta / ToolUseComplete are rendered
-        # by the TUI spinner / tool-status bar — stubbed for ch02.
+        elif isinstance(event, ToolUseStart):
+            print(f"\n[TOOL] {event.tool_name} ...", flush=True)
+        elif isinstance(event, ToolUseComplete):
+            print(" done.", flush=True)
+        elif isinstance(event, ToolUseDelta):
+            pass  # incremental args not shown in REPL
+
+    @property
+    def pending_ask_user_event(self) -> Any:
+        """Expose AskUserTool's pending event for TUI consumption."""
+        tool = self.registry.get("AskUserQuestion")
+        if tool is not None and hasattr(tool, "pending_event"):
+            return tool.pending_event
+        return None
 
 
 async def main() -> None:
