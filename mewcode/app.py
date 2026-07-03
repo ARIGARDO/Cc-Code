@@ -16,7 +16,23 @@ from mewcode.client import (
 )
 from mewcode.config import ProviderConfig
 from mewcode.conversation import ConversationManager
-from mewcode.agent import Agent
+from mewcode.agent import (
+    Agent,
+    CompactNotification,
+    ErrorEvent,
+    HookEvent,
+    LoopComplete,
+    PermissionMode,
+    PermissionRequest,
+    PermissionResponse,
+    RetryEvent,
+    StreamText,
+    ThinkingText,
+    ToolResultEvent,
+    ToolUseEvent,
+    TurnComplete,
+    UsageEvent,
+)
 from mewcode.tools import ToolRegistry, create_default_registry
 
 
@@ -75,11 +91,19 @@ class MewCodeApp:
 
         self.agent = Agent(
             client=self.client,
-            conversation=self.conversation,
             registry=self.registry,
-            system="You are MewCode, a terminal AI coding assistant.",
             protocol=protocol,
+            instructions_content="You are MewCode, a terminal AI coding assistant.",
         )
+
+    def set_plan_mode(self, enabled: bool) -> None:
+        """Toggle Plan Mode on/off."""
+        if self.agent is None:
+            return
+        if enabled:
+            self.agent.set_permission_mode(PermissionMode.PLAN)
+        else:
+            self.agent.set_permission_mode(PermissionMode.DEFAULT)
 
     async def process_message(self, user_input: str) -> None:
         """Send a user message and stream the agent response."""
@@ -90,31 +114,50 @@ class MewCodeApp:
         self.conversation.add_user_message(user_input)
 
         try:
-            async for event in self.agent.run():
+            async for event in self.agent.run(self.conversation):
                 self._render_event(event)
         except LLMError as e:
             self._show_error(str(e))
 
     def _render_event(self, event: Any) -> None:
-        """Render a single agent event to the terminal (TUI binding point)."""
-        from mewcode.agent import (
-            StreamText,
-            ThinkingText,
-            ToolUseStart,
-            ToolUseDelta,
-            ToolUseComplete,
-        )
-
+        """Render a single agent event to the terminal (REPL binding point)."""
         if isinstance(event, StreamText):
             print(event.text, end="", flush=True)
+
         elif isinstance(event, ThinkingText):
             print(f"\033[2m{event.text}\033[0m", end="", flush=True)
-        elif isinstance(event, ToolUseStart):
+
+        elif isinstance(event, ToolUseEvent):
             print(f"\n[TOOL] {event.tool_name} ...", flush=True)
-        elif isinstance(event, ToolUseComplete):
-            print(" done.", flush=True)
-        elif isinstance(event, ToolUseDelta):
-            pass  # incremental args not shown in REPL
+
+        elif isinstance(event, ToolResultEvent):
+            pass  # Tool results are printed inline by the conversation
+
+        elif isinstance(event, TurnComplete):
+            pass  # No visual for turn boundaries
+
+        elif isinstance(event, LoopComplete):
+            print()  # Clean newline at end of response
+
+        elif isinstance(event, UsageEvent):
+            # Print token usage info
+            print(f"\n[USAGE] In: {event.input_tokens} | Out: {event.output_tokens} | Total: {event.total_input}/{event.total_output}", flush=True)
+
+        elif isinstance(event, ErrorEvent):
+            print(f"\n[ERROR] {event.message}", flush=True)
+
+        elif isinstance(event, RetryEvent):
+            print(f"\n[RETRY] {event.reason}", flush=True)
+
+        elif isinstance(event, CompactNotification):
+            print(f"\n[COMPACT] {event.message}", flush=True)
+
+        elif isinstance(event, HookEvent):
+            pass  # Hook events not shown in REPL
+
+        elif isinstance(event, PermissionRequest):
+            # Auto-allow in REPL mode (no interactive UI)
+            event.future.set_result(PermissionResponse.ALLOW)
 
     @property
     def pending_ask_user_event(self) -> Any:
@@ -139,7 +182,6 @@ async def main() -> None:
     app = MewCodeApp(config)
     await app.start()
 
-    # Simple REPL loop for ch02 end-to-end verification
     print("MewCode — type a message (Ctrl+C to exit)")
     while True:
         try:

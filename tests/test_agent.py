@@ -13,13 +13,14 @@ import pytest
 from mewcode.agent import (
     Agent,
     AgentEvent,
-    LLMResponse,
+    HookEvent,
+    LoopComplete,
     StreamCollector,
     StreamText,
     ThinkingText,
-    ToolUseComplete,
-    ToolUseDelta,
-    ToolUseStart,
+    ToolResultEvent,
+    ToolUseEvent,
+    TurnComplete,
     partition_tool_calls,
 )
 from mewcode.client import (
@@ -178,14 +179,13 @@ class TestStreamCollector:
         async for ev in collector.consume(events()):
             output.append(ev)
 
-        assert len(output) == 5
-        assert isinstance(output[0], ToolUseStart)
+        assert len(output) == 1
+        assert isinstance(output[0], ToolUseEvent)
         assert output[0].tool_name == "read_file"
-        assert isinstance(output[-1], ToolUseComplete)
-        assert output[-1].arguments == {"path": "/x"}
+        assert output[0].arguments == {"path": "/x"}
 
         resp = collector.response()
-        assert len(resp.tool_uses) == 1
+        assert len(resp.tool_calls) == 1
 
     @pytest.mark.asyncio
     async def test_collects_thinking_events(self) -> None:
@@ -198,7 +198,7 @@ class TestStreamCollector:
             yield TextDelta(text="Answer")
             yield StreamEnd(stop_reason="end_turn", input_tokens=5, output_tokens=3)
 
-        async for ev in collector.consume(events()):
+        async for _ in collector.consume(events()):
             pass
 
         resp = collector.response()
@@ -244,14 +244,14 @@ class TestAgentIntegration:
                 ]
             )
 
-            agent = Agent(client=mock, conversation=conv, registry=registry)
+            agent = Agent(client=mock, registry=registry, protocol="openai")
             events: list[AgentEvent] = []
-            async for ev in agent.run():
+            async for ev in agent.run(conv):
                 events.append(ev)
 
-            tool_starts = [e for e in events if isinstance(e, ToolUseStart)]
-            assert len(tool_starts) == 1
-            assert tool_starts[0].tool_name == "ReadFile"
+            tool_uses = [e for e in events if isinstance(e, ToolUseEvent)]
+            assert len(tool_uses) == 1
+            assert tool_uses[0].tool_name == "ReadFile"
 
             text_events = [e for e in events if isinstance(e, StreamText)]
             assert any("File contents" in e.text for e in text_events)
@@ -324,8 +324,9 @@ class TestAgentIntegration:
             ]
         )
 
-        agent = Agent(client=mock, conversation=conv)
-        async for _ in agent.run():
+        registry = create_default_registry()
+        agent = Agent(client=mock, registry=registry, protocol="openai")
+        async for _ in agent.run(conv):
             pass
 
         assert agent.total_input_tokens == 15
@@ -349,8 +350,9 @@ class TestAgentIntegration:
             ]
         )
 
-        agent = Agent(client=mock, conversation=conv, registry=registry)
-        async for _ in agent.run():
+        registry = create_default_registry()
+        agent = Agent(client=mock, registry=registry, protocol="openai")
+        async for _ in agent.run(conv):
             pass
 
         # The tool result message should contain an error
@@ -391,8 +393,8 @@ class TestAgentIntegration:
                 ]
             )
 
-            agent = Agent(client=mock, conversation=conv, registry=registry)
-            async for _ in agent.run():
+            agent = Agent(client=mock, registry=registry, protocol="openai")
+            async for _ in agent.run(conv):
                 pass
 
             assert Path(tmp_path).read_text() == "test content"
@@ -441,16 +443,16 @@ class TestAgentIntegration:
                 ]
             )
 
-            agent = Agent(client=mock, conversation=conv, registry=registry)
+            agent = Agent(client=mock, registry=registry, protocol="openai")
             events: list[AgentEvent] = []
-            async for ev in agent.run():
+            async for ev in agent.run(conv):
                 events.append(ev)
 
             # Should have executed both tools
-            tool_starts = [e for e in events if isinstance(e, ToolUseStart)]
-            assert len(tool_starts) == 2
-            assert tool_starts[0].tool_name == "WriteFile"
-            assert tool_starts[1].tool_name == "ReadFile"
+            tool_uses = [e for e in events if isinstance(e, ToolUseEvent)]
+            assert len(tool_uses) == 2
+            assert tool_uses[0].tool_name == "WriteFile"
+            assert tool_uses[1].tool_name == "ReadFile"
 
             assert agent.total_input_tokens == 45
             assert agent.total_output_tokens == 30
@@ -474,7 +476,7 @@ class TestPartitionToolCalls:
         batches = partition_tool_calls(uses, registry)
         # All read-only, all concurrency safe → single batch
         assert len(batches) == 1
-        assert len(batches[0]) == 3
+        assert len(batches[0].calls) == 3
 
     def test_write_splits_batch(self) -> None:
         registry = create_default_registry()
@@ -486,9 +488,9 @@ class TestPartitionToolCalls:
         batches = partition_tool_calls(uses, registry)
         # ReadFile (safe) → batch0, WriteFile (not safe) → batch1, ReadFile → batch2
         assert len(batches) == 3
-        assert batches[0][0].name == "ReadFile"
-        assert batches[1][0].name == "WriteFile"
-        assert batches[2][0].name == "ReadFile"
+        assert batches[0].calls[0].name == "ReadFile"
+        assert batches[1].calls[0].name == "WriteFile"
+        assert batches[2].calls[0].name == "ReadFile"
 
     def test_unknown_tool_not_safe(self) -> None:
         registry = create_default_registry()
@@ -499,8 +501,8 @@ class TestPartitionToolCalls:
         batches = partition_tool_calls(uses, registry)
         # Unknown → not safe → first batch is solo UnknownTool
         assert len(batches) == 2
-        assert batches[0][0].name == "UnknownTool"
-        assert batches[1][0].name == "ReadFile"
+        assert batches[0].calls[0].name == "UnknownTool"
+        assert batches[1].calls[0].name == "ReadFile"
 
 
 # ──────────────────────────────────────────────

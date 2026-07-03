@@ -41,6 +41,8 @@ class Bash(Tool):
                 proc.communicate(), timeout=effective_timeout
             )
         except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
             return ToolResult(
                 f"Error: command timed out after {effective_timeout}s",
                 is_error=True,
