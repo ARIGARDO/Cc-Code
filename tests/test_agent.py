@@ -920,3 +920,109 @@ class TestToolSearch:
         tool = ToolSearchTool(registry)
         result = await tool.execute(ToolSearchParams(query="zzz_nonexistent_zzz"))
         assert "No matching deferred tools" in result.output
+
+
+# ──────────────────────────────────────────────
+#  System Prompt tests (ch05)
+# ──────────────────────────────────────────────
+
+class TestSystemPrompt:
+    def test_build_system_prompt_normal(self) -> None:
+        from mewcode.prompts import build_system_prompt
+        prompt = build_system_prompt(work_dir="/home/user/project")
+        assert "MewCode" in prompt
+        assert "plan mode" not in prompt.lower()
+
+    def test_build_system_prompt_with_custom_instructions(self) -> None:
+        from mewcode.prompts import build_system_prompt
+        prompt = build_system_prompt(
+            work_dir="/home/user/project",
+            custom_instructions="Always use type hints.",
+        )
+        assert "Always use type hints." in prompt
+
+    def test_build_system_prompt_with_memory(self) -> None:
+        from mewcode.prompts import build_system_prompt
+        prompt = build_system_prompt(
+            work_dir="/home/user/project",
+            memory_section="User prefers pytest over unittest.",
+        )
+        assert "User prefers pytest over unittest." in prompt
+
+    def test_build_plan_mode_reminder_full(self) -> None:
+        from mewcode.prompts import build_plan_mode_reminder
+        reminder = build_plan_mode_reminder(
+            Path("/tmp/plan.md"), plan_exists=False, iteration=1,
+        )
+        assert "plan mode" in reminder.lower()
+        assert "MUST NOT" in reminder
+
+    def test_build_plan_mode_reminder_sparse(self) -> None:
+        from mewcode.prompts import build_plan_mode_reminder
+        reminder = build_plan_mode_reminder(
+            Path("/tmp/plan.md"), plan_exists=False, iteration=8,
+        )
+        assert "Plan mode still active" in reminder
+
+    def test_build_environment_context(self) -> None:
+        from mewcode.prompts import build_environment_context
+        ctx = build_environment_context(work_dir="/home/user/project")
+        assert "/home/user/project" in ctx
+        assert "Operating system" in ctx
+        assert "Current time" in ctx
+
+    def test_environment_section(self) -> None:
+        from mewcode.prompts import environment_section
+        section = environment_section(work_dir="/home/user/project")
+        assert section.priority == 70
+        assert section.name == "Environment"
+        assert "/home/user/project" in section.content
+        assert "Platform" in section.content
+        assert "Date" in section.content
+
+    def test_prompt_builder_empty(self) -> None:
+        from mewcode.prompts import PromptBuilder
+        builder = PromptBuilder()
+        assert builder.build() == ""
+
+    def test_prompt_builder_sorts_by_priority(self) -> None:
+        from mewcode.prompts import PromptBuilder, PromptSection
+        builder = PromptBuilder()
+        builder.add(PromptSection(name="B", priority=20, content="second"))
+        builder.add(PromptSection(name="A", priority=10, content="first"))
+        builder.add(PromptSection(name="C", priority=30, content="third"))
+        result = builder.build()
+        parts = result.split("\n\n")
+        assert parts[0] == "first"
+        assert parts[1] == "second"
+        assert parts[2] == "third"
+
+    def test_prompt_builder_skips_empty(self) -> None:
+        from mewcode.prompts import PromptBuilder, PromptSection
+        builder = PromptBuilder()
+        builder.add(PromptSection(name="A", priority=10, content=""))
+        builder.add(PromptSection(name="B", priority=20, content="  "))
+        builder.add(PromptSection(name="C", priority=30, content="real"))
+        result = builder.build()
+        assert result == "real"
+
+    def test_prompt_builder_chainable(self) -> None:
+        from mewcode.prompts import PromptBuilder, PromptSection
+        builder = PromptBuilder()
+        result = (
+            builder
+            .add(PromptSection(name="A", priority=10, content="first"))
+            .add(PromptSection(name="B", priority=20, content="second"))
+            .build()
+        )
+        assert "first" in result
+        assert "second" in result
+
+    def test_prompt_section_key_fragments(self) -> None:
+        from mewcode.prompts import build_system_prompt
+        prompt = build_system_prompt(work_dir="/home/user/project")
+        assert "IMPORTANT: Be careful not to introduce security" in prompt
+        assert "<system-reminder>" in prompt
+        assert "Only use emojis if the user explicitly requests it" in prompt
+        assert "file_path:line_number" in prompt
+        assert "Do not use a colon before tool calls" in prompt

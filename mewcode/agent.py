@@ -448,8 +448,10 @@ class Agent:
         total_output = 0
 
         # Inject environment and long-term memory once at start
-        from mewcode.context import inject_environment_context, get_long_term_memory
-        inject_environment_context(conversation, str(self.work_dir))
+        from mewcode.context import get_long_term_memory
+        from mewcode.prompts import build_environment_context
+        env_ctx = build_environment_context(work_dir=str(self.work_dir))
+        conversation.inject_environment(env_ctx)
         if self.memory_manager:
             ltm = get_long_term_memory(self.memory_manager)
             if ltm:
@@ -493,8 +495,8 @@ class Agent:
             # Step 3: Build system prompt
             from mewcode.prompts import build_system_prompt
             system_prompt = build_system_prompt(
-                coordinator_mode=self.coordinator_mode,
-                extra_instructions=self.instructions_content,
+                work_dir=str(self.work_dir),
+                custom_instructions=self.instructions_content,
             )
 
             # Step 4: Plan mode reminder
