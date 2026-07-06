@@ -18,7 +18,7 @@ from mewcode.client import (
     LLMError,
     create_client,
 )
-from mewcode.config import ProviderConfig
+from mewcode.config import MCPServerConfig, ProviderConfig
 from mewcode.conversation import ConversationManager
 from mewcode.agent import (
     Agent,
@@ -56,7 +56,11 @@ _MODE_CYCLE = [
 class MewCodeApp:
     """Top-level application that owns the TUI, client, registry, and agent lifecycle."""
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        mcp_servers: Optional[list[MCPServerConfig]] = None,
+    ) -> None:
         self._config = config
         self.client: Any = None
         self.agent: Optional[Agent] = None
@@ -66,6 +70,13 @@ class MewCodeApp:
         self._provider: Optional[ProviderConfig] = None
         self._work_dir: Path = Path.cwd()
         self._permission_checker: Optional[PermissionChecker] = None
+
+        # MCP integration (T9)
+        self._mcp_server_configs: list[MCPServerConfig] = list(mcp_servers or [])
+        self._mcp_manager: Optional[Any] = None
+        self._mcp_init_task: Optional[asyncio.Task[None]] = None
+        self._mcp_instructions: str = ""
+        self._mcp_reminder_injected: bool = False
 
     def _select_provider(self) -> None:
         """Choose the first configured provider and create its client."""
@@ -133,6 +144,55 @@ class MewCodeApp:
             permission_checker=self._permission_checker,
             instructions_content="You are MewCode, a terminal AI coding assistant.",
         )
+
+        # Kick off MCP server connections asynchronously (T9 / N1)
+        if self._mcp_server_configs:
+            self._mcp_init_task = asyncio.create_task(self._init_mcp())
+
+    async def _init_mcp(self) -> None:
+        """Connect to all configured MCP servers and register their tools."""
+        from mewcode.mcp import MCPManager
+
+        self._mcp_manager = MCPManager()
+        self._mcp_manager.load_configs(self._mcp_server_configs)
+        errors = await self._mcp_manager.register_all_tools(self.registry)
+
+        if errors:
+            for err in errors:
+                print(f"[MCP] {err}")
+
+        # Build system-reminder instructions listing available MCP tools
+        tool_names = [
+            name
+            for name in self.registry.list_tools()
+            if name.startswith("mcp_")
+        ]
+        if tool_names:
+            lines = ["The following MCP tools are available:"]
+            for name in tool_names:
+                tool = self.registry.get(name)
+                desc = tool.description if tool else ""
+                lines.append(f"- {name}: {desc}")
+            self._mcp_instructions = "\n".join(lines)
+            count = len(self._mcp_server_configs) - len(errors)
+            print(
+                f"[MCP] Connected to {count} MCP server(s), "
+                f"{len(tool_names)} tools registered",
+                flush=True,
+            )
+
+    async def _shutdown_mcp(self) -> None:
+        """Cancel the init task and shut down all MCP clients (N6)."""
+        if self._mcp_init_task is not None and not self._mcp_init_task.done():
+            self._mcp_init_task.cancel()
+            try:
+                await self._mcp_init_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._mcp_init_task = None
+        if self._mcp_manager is not None:
+            await self._mcp_manager.shutdown()
+            self._mcp_manager = None
 
     def set_plan_mode(self, enabled: bool) -> None:
         """Toggle Plan Mode on/off."""
@@ -235,6 +295,19 @@ class MewCodeApp:
             self._show_error("Agent not initialized. Call start() first.")
             return
 
+        # Wait for MCP init to finish before sending (T9 / F10)
+        if self._mcp_init_task is not None and not self._mcp_init_task.done():
+            print("[MCP] Waiting for MCP servers to connect...", flush=True)
+            try:
+                await self._mcp_init_task
+            except Exception:
+                pass
+
+        # Inject MCP tool list as a one-time system reminder (T9)
+        if self._mcp_instructions and not self._mcp_reminder_injected:
+            self.conversation.add_system_reminder(self._mcp_instructions)
+            self._mcp_reminder_injected = True
+
         self.conversation.add_user_message(user_input)
 
         try:
@@ -313,16 +386,20 @@ class MewCodeApp:
 
 async def main() -> None:
     """Entry point for ``python -m mewcode``."""
-    import yaml
     from pathlib import Path
 
+    from mewcode.config import load_config
+
     config_path = Path("config.yaml")
-    config: dict[str, Any] = {"providers": []}
+    app_config = load_config(config_path)
+    # Keep dict shape for backward-compat provider selection
+    import yaml
+    raw: dict[str, Any] = {"providers": []}
     if config_path.exists():
         with open(config_path) as f:
-            config = yaml.safe_load(f) or config
+            raw = yaml.safe_load(f) or raw
 
-    app = MewCodeApp(config)
+    app = MewCodeApp(raw, mcp_servers=app_config.mcp_servers)
     await app.start()
 
     print("MewCode — type a message (Ctrl+C to exit)")
@@ -341,6 +418,8 @@ async def main() -> None:
         except (KeyboardInterrupt, EOFError):
             print("\nGoodbye.")
             break
+
+    await app._shutdown_mcp()
 
 
 if __name__ == "__main__":
