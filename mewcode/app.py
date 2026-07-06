@@ -6,7 +6,11 @@ Wires together provider selection, LLM client, Agent, ToolRegistry, and the Text
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any, Optional
+
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import InMemoryHistory
 
 from mewcode.cache import FileCache
 from mewcode.client import (
@@ -33,7 +37,20 @@ from mewcode.agent import (
     TurnComplete,
     UsageEvent,
 )
+from mewcode.permissions.checker import PermissionChecker
+from mewcode.permissions.dangerous import DangerousCommandDetector
+from mewcode.permissions.rules import RuleEngine
+from mewcode.permissions.sandbox import PathSandbox
 from mewcode.tools import ToolRegistry, create_default_registry
+
+_MODE_CYCLE = [
+    PermissionMode.DEFAULT,
+    PermissionMode.ACCEPT_EDITS,
+    PermissionMode.PLAN,
+    PermissionMode.BYPASS,
+    PermissionMode.CUSTOM,
+    PermissionMode.DONT_ASK,
+]
 
 
 class MewCodeApp:
@@ -47,6 +64,8 @@ class MewCodeApp:
         self.file_cache = FileCache()
         self.registry: ToolRegistry = create_default_registry(file_cache=self.file_cache)
         self._provider: Optional[ProviderConfig] = None
+        self._work_dir: Path = Path.cwd()
+        self._permission_checker: Optional[PermissionChecker] = None
 
     def _select_provider(self) -> None:
         """Choose the first configured provider and create its client."""
@@ -89,10 +108,29 @@ class MewCodeApp:
         self.registry.register(ToolSearchTool(self.registry, protocol=protocol))
         self.registry.register(AskUserTool())
 
+        # Build permission checker
+        work_dir = self._work_dir
+        home = Path.home()
+        detector = DangerousCommandDetector()
+        sandbox = PathSandbox(project_root=work_dir)
+        rule_engine = RuleEngine(
+            user_rules_path=home / ".mewcode" / "permissions.yaml",
+            project_rules_path=work_dir / ".mewcode" / "permissions.yaml",
+            local_rules_path=work_dir / ".mewcode" / "permissions.local.yaml",
+        )
+        self._permission_checker = PermissionChecker(
+            detector=detector,
+            sandbox=sandbox,
+            rule_engine=rule_engine,
+            mode=PermissionMode.DEFAULT,
+        )
+
         self.agent = Agent(
             client=self.client,
             registry=self.registry,
             protocol=protocol,
+            work_dir=work_dir,
+            permission_checker=self._permission_checker,
             instructions_content="You are MewCode, a terminal AI coding assistant.",
         )
 
@@ -105,8 +143,94 @@ class MewCodeApp:
         else:
             self.agent.set_permission_mode(PermissionMode.DEFAULT)
 
+    def action_cycle_mode(self) -> None:
+        """Shift+Tab: cycle through permission modes."""
+        if self.agent is None:
+            return
+        current = self.agent.permission_mode
+        try:
+            idx = _MODE_CYCLE.index(current)
+            next_idx = (idx + 1) % len(_MODE_CYCLE)
+        except ValueError:
+            next_idx = 0
+        new_mode = _MODE_CYCLE[next_idx]
+        self.agent.set_permission_mode(new_mode)
+        if self._permission_checker:
+            self._permission_checker.mode = new_mode
+
+    def handle_command(self, text: str) -> bool:
+        """Handle slash commands. Returns True if consumed, False if not a command."""
+        stripped = text.strip()
+        if not stripped.startswith("/"):
+            return False
+
+        parts = stripped.split(None, 1)
+        cmd = parts[0].lower()
+        arg = parts[1].strip() if len(parts) > 1 else ""
+
+        if cmd == "/plan":
+            self.set_plan_mode(True)
+            print("[MODE] Switched to Plan mode")
+            return True
+
+        if cmd == "/do":
+            if arg.lower() in ("yolo", "bypass"):
+                if self.agent:
+                    self.agent.set_permission_mode(PermissionMode.BYPASS)
+                    if self._permission_checker:
+                        self._permission_checker.mode = PermissionMode.BYPASS
+                print("[MODE] Switched to Bypass mode (YOLO)")
+            else:
+                self.set_plan_mode(False)
+                print("[MODE] Switched to Default mode")
+            return True
+
+        if cmd in ("/next", "/n"):
+            self.action_cycle_mode()
+            current = self.agent.permission_mode if self.agent else PermissionMode.DEFAULT
+            print(f"[MODE] Switched to: {current.value}")
+            return True
+
+        if cmd == "/mode":
+            if not arg:
+                current = self.agent.permission_mode if self.agent else PermissionMode.DEFAULT
+                print(f"[MODE] Current: {current.value}")
+                print("[MODE] Available: default, acceptEdits, plan, bypassPermissions, custom, dontAsk")
+                print("[MODE] Usage: /mode <name>  or  /mode next  (cycle)")
+                return True
+            if arg == "next":
+                self.action_cycle_mode()
+                current = self.agent.permission_mode if self.agent else PermissionMode.DEFAULT
+                print(f"[MODE] Switched to: {current.value}")
+                return True
+            mode_map = {
+                "default": PermissionMode.DEFAULT,
+                "acceptEdits": PermissionMode.ACCEPT_EDITS,
+                "accept": PermissionMode.ACCEPT_EDITS,
+                "plan": PermissionMode.PLAN,
+                "bypassPermissions": PermissionMode.BYPASS,
+                "bypass": PermissionMode.BYPASS,
+                "custom": PermissionMode.CUSTOM,
+                "dontAsk": PermissionMode.DONT_ASK,
+            }
+            new_mode = mode_map.get(arg)
+            if new_mode is None:
+                print(f"[MODE] Unknown mode: {arg}")
+                print(f"[MODE] Available: {', '.join(mode_map.keys())}")
+                return True
+            if self.agent:
+                self.agent.set_permission_mode(new_mode)
+            if self._permission_checker:
+                self._permission_checker.mode = new_mode
+            print(f"[MODE] Switched to: {new_mode.value}")
+            return True
+
+        return False
+
     async def process_message(self, user_input: str) -> None:
         """Send a user message and stream the agent response."""
+        if self.handle_command(user_input):
+            return
         if self.agent is None:
             self._show_error("Agent not initialized. Call start() first.")
             return
@@ -156,8 +280,27 @@ class MewCodeApp:
             pass  # Hook events not shown in REPL
 
         elif isinstance(event, PermissionRequest):
-            # Auto-allow in REPL mode (no interactive UI)
-            event.future.set_result(PermissionResponse.ALLOW)
+            self._handle_permission_request(event)
+
+    def _handle_permission_request(self, event: PermissionRequest) -> None:
+        from mewcode.permission_dialog import InlinePermissionWidget
+        tool_name = event.tool_name
+        args = event.tool_args
+        from mewcode.permissions.rules import extract_content
+        content = extract_content(tool_name, args)
+        desc = content if content else str(args)
+        widget = InlinePermissionWidget(tool_name=tool_name, description=desc)
+        print(f"\n{widget.render()}", flush=True)
+        while True:
+            try:
+                choice = input("Choose [1-3]: ").strip()
+                idx = int(choice) - 1
+                response = widget.handle_choice(idx)
+                break
+            except (ValueError, EOFError, KeyboardInterrupt):
+                response = PermissionResponse.DENY
+                break
+        event.future.set_result(response)
 
     @property
     def pending_ask_user_event(self) -> Any:
@@ -183,9 +326,14 @@ async def main() -> None:
     await app.start()
 
     print("MewCode — type a message (Ctrl+C to exit)")
+    print("Commands: /plan  /do  /mode [name]  /next (cycle mode)")
+    session = PromptSession(history=InMemoryHistory())
     while True:
         try:
-            user_input = input("> ")
+            mode_str = ""
+            if app.agent:
+                mode_str = f" [{app.agent.permission_mode.value}]"
+            user_input = await session.prompt_async(f"MewCode{mode_str}> ")
             if not user_input.strip():
                 continue
             await app.process_message(user_input)

@@ -18,6 +18,8 @@ from mewcode.conversation import (
     ToolResultBlock,
     ToolUseBlock,
 )
+from mewcode.permissions.modes import PermissionMode
+from mewcode.permissions.rules import extract_content
 from mewcode.tools.base import (
     MAX_OUTPUT_CHARS,
     StreamEnd,
@@ -312,10 +314,6 @@ class StreamingExecutor:
 #  Agent class (main orchestrator)
 # ──────────────────────────────────────────────
 
-class PermissionMode(Enum):
-    DEFAULT = "default"
-    PLAN = "plan"
-
 class Agent:
     """Orchestrates the ReAct loop: LLM → tools → results → repeat.
 
@@ -504,6 +502,8 @@ class Agent:
             if self.permission_mode == PermissionMode.PLAN:
                 plan_path = self._get_plan_path()
                 plan_exists = plan_path.exists()
+                if self.permission_checker:
+                    self.permission_checker.plan_file_path = str(plan_path)
                 from mewcode.prompts import build_plan_mode_reminder
                 reminder = build_plan_mode_reminder(plan_path, plan_exists, iteration)
                 conversation.add_system_reminder(reminder)
@@ -768,17 +768,16 @@ class Agent:
 
         # Permission check
         if self.permission_checker:
-            file_path = self._infer_file_path(args)
-            check_result = self.permission_checker.check(tool_name, file_path)
-            if check_result.decision == "deny":
+            decision = self.permission_checker.check(tool, args)
+            if decision.effect == "deny":
                 yield ToolResultEvent(
                     tool_id=tc.id,
                     tool_name=tool_name,
-                    result=f"Permission denied: {check_result.reason}",
+                    result=f"Permission denied: {decision.reason}",
                     is_error=True,
                 )
                 return
-            elif check_result.decision == "ask":
+            elif decision.effect == "ask":
                 loop = asyncio.get_running_loop()
                 future = loop.create_future()
                 yield PermissionRequest(
@@ -786,8 +785,8 @@ class Agent:
                     tool_args=args,
                     future=future,
                 )
-                decision = await future
-                if decision == PermissionResponse.DENY:
+                response = await future
+                if response == PermissionResponse.DENY:
                     yield ToolResultEvent(
                         tool_id=tc.id,
                         tool_name=tool_name,
@@ -795,13 +794,15 @@ class Agent:
                         is_error=True,
                     )
                     return
-                elif decision == PermissionResponse.ALLOW_ALWAYS:
-                    # Add local rule to allow this tool/pattern
+                elif response == PermissionResponse.ALLOW_ALWAYS:
                     if hasattr(self.permission_checker, "rule_engine"):
-                        pattern = file_path + "*" if file_path else tool_name + "/*"
-                        from mewcode.permissions import Rule
+                        content = extract_content(tool_name, args)
+                        if len(content) > 60:
+                            content = content[:60] + "*"
+                        pattern = content + "*" if content else "*"
+                        from mewcode.permissions.rules import Rule
                         self.permission_checker.rule_engine.append_local_rule(
-                            Rule(tool_name=tool_name, pattern=pattern, decision="allow")
+                            Rule(tool_name=tool_name, pattern=pattern, effect="allow")
                         )
 
         # Validate parameters
