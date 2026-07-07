@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import Container
+from textual.containers import Container, VerticalScroll
 from textual.reactive import reactive
 from textual.widgets import Static
 
@@ -33,6 +33,7 @@ class MewCodeHeader(Static):
     version: reactive[str] = reactive("v0.1.0")
     model_name: reactive[str] = reactive("")
     work_dir: reactive[str] = reactive("")
+    context_info: reactive[str] = reactive("")
 
     def __init__(
         self,
@@ -57,6 +58,10 @@ class MewCodeHeader(Static):
             self.model_name,
             self.work_dir,
         ]
+        if self.context_info:
+            col2.append(self.context_info)
+        else:
+            col2.append("")
         col1_width = max(len(s) for s in col1)
         lines = []
         for left, right in zip(col1, col2):
@@ -71,6 +76,9 @@ class MewCodeHeader(Static):
         self.update(self._render_logo())
 
     def watch_work_dir(self, _value: str) -> None:
+        self.update(self._render_logo())
+
+    def watch_context_info(self, _value: str) -> None:
         self.update(self._render_logo())
 
 
@@ -126,64 +134,104 @@ class MCPStatus(Static):
             self.add_class(c)
 
 
-class ChatOutput(Static):
+class ChatOutput(VerticalScroll):
     """Scrollable chat output area for streaming agent responses.
 
     Initially hidden; becomes visible when first content is appended.
-    Grows with content up to available space (Claude Code style).
-    Uses Static instead of TextArea to avoid cursor/selection highlight.
+    Fills all available vertical space in TUILayout.
+    Uses VerticalScroll for proper programmatic scrolling support.
+    Contains an inner Static widget for text rendering.
+
+    Auto-scrolls to bottom on new content unless the user has
+    manually scrolled up; resumes auto-scroll when scrolled back
+    to the bottom.
     """
 
     DEFAULT_CSS = """
     ChatOutput {
         display: none;
-        height: auto;
-        max-height: 1fr;
+        height: 1fr;
         width: 100%;
         border: none;
         background: $surface;
         color: $text;
-        overflow-y: hidden;
+        scrollbar-size: 1 1;
+        overflow-y: auto;
+    }
+    ChatOutput > .chat-content {
+        height: auto;
+        width: 100%;
+        background: transparent;
+        color: $text;
+        padding: 0 1;
     }
     """
 
     _has_content: bool = False
     _lines: list[str] = []
+    _content_widget: Static | None = None
+    _auto_scroll: bool = True
+    _pending_scroll: bool = False
+
+    def compose(self) -> ComposeResult:
+        self._content_widget = Static("", classes="chat-content")
+        yield self._content_widget
 
     def _ensure_visible(self) -> None:
         if not self._has_content:
             self._has_content = True
             self.styles.display = "block"
 
+    def on_scroll(self, event: VerticalScroll.OnScroll) -> None:
+        max_y = self.max_scroll_y
+        if max_y <= 0:
+            return
+        at_bottom = self.scroll_y >= max_y - 2
+        self._auto_scroll = at_bottom
+
     def append_text(self, text: str) -> None:
         self._ensure_visible()
         self._lines.append(text)
-        self.update("".join(self._lines))
-        self.call_after_refresh(self._scroll_end)
+        if self._content_widget:
+            self._content_widget.update("".join(self._lines))
+        if self._auto_scroll and not self._pending_scroll:
+            self._pending_scroll = True
+            self.call_after_refresh(self._schedule_scroll)
+
+    def _schedule_scroll(self) -> None:
+        self.set_timer(0.02, self._do_scroll_end)
 
     def append_line(self, text: str = "") -> None:
         self.append_text(text + "\n")
 
     def clear_output(self) -> None:
         self._lines.clear()
-        self.update("")
+        if self._content_widget:
+            self._content_widget.update("")
         self._has_content = False
+        self._auto_scroll = True
         self.styles.display = "none"
 
-    async def _scroll_end(self) -> None:
+    async def _do_scroll_end(self) -> None:
+        self._pending_scroll = False
+        if not self._auto_scroll:
+            return
         try:
-            self.scroll_to(y=999999, animate=False)
+            self.scroll_end(animate=False)
         except Exception:
             pass
 
 
 class TUILayout(Container):
-    """Root layout container organizing header, status, chat."""
+    """Root layout container organizing header, status, chat.
+
+    Uses vertical layout; ChatOutput fills remaining space via 1fr.
+    """
 
     DEFAULT_CSS = """
     TUILayout {
         layout: vertical;
-        height: auto;
+        height: 100%;
         width: 100%;
     }
     """

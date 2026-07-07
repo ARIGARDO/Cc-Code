@@ -95,6 +95,12 @@ class ConversationManager:
     def add_tool_results_message(self, results: list[ToolResultBlock]) -> None:
         self.history.append(Message(role="user", tool_results=list(results)))
 
+    def clear(self) -> None:
+        self.history.clear()
+        self.env_injected = False
+        self.ltm_injected = False
+        self.last_input_tokens = 0
+
     # ── injection (F11) ───────────────────────
 
     def inject_environment(self, context: str) -> None:

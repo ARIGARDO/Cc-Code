@@ -24,6 +24,41 @@ from mewcode.tools.base import (
 
 
 # ──────────────────────────────────────────────
+#  Anthropic cache-control helpers (T13)
+# ──────────────────────────────────────────────
+
+_EPHEMERAL = {"type": "ephemeral"}
+
+
+def _mark_last_user_tail_for_cache(messages: list[dict[str, Any]]) -> None:
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            content = m.get("content")
+            if isinstance(content, str):
+                m["content"] = [
+                    {"type": "text", "text": content, "cache_control": _EPHEMERAL}
+                ]
+            elif isinstance(content, list):
+                for block in reversed(content):
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        block["cache_control"] = _EPHEMERAL
+                        break
+            break
+
+
+def _mark_last_tool_for_cache(
+    tools: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not tools:
+        return tools
+    result = list(tools)
+    last = dict(result[-1])
+    last["cache_control"] = _EPHEMERAL
+    result[-1] = last
+    return result
+
+
+# ──────────────────────────────────────────────
 #  Error hierarchy (T3 / checklist lines 24-40)
 # ──────────────────────────────────────────────
 
@@ -118,6 +153,7 @@ class AnthropicClient(LLMClient):
         import anthropic
 
         messages = conversation.serialize("anthropic")
+        _mark_last_user_tail_for_cache(messages)
 
         kwargs: dict[str, Any] = {
             "model": self._config.model,
@@ -125,9 +161,11 @@ class AnthropicClient(LLMClient):
             "max_tokens": self._max_output_tokens,
         }
         if system:
-            kwargs["system"] = system
+            kwargs["system"] = [
+                {"type": "text", "text": system, "cache_control": _EPHEMERAL}
+            ]
         if tools:
-            kwargs["tools"] = tools
+            kwargs["tools"] = _mark_last_tool_for_cache(tools)
 
         # ── thinking configuration ──────────────────────────
         if self._config.thinking:

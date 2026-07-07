@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import logging
 import random
 import uuid
 from collections.abc import AsyncIterator, AsyncGenerator
@@ -17,6 +18,17 @@ from mewcode.conversation import (
     ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
+)
+from mewcode.context import (
+    CompactCircuitBreaker,
+    CompactEvent,
+    ContentReplacementState,
+    RecoveryState,
+    append_replacement_records,
+    apply_tool_result_budget,
+    auto_compact,
+    create_replacement_state,
+    ensure_session_dir,
 )
 from mewcode.permissions.modes import PermissionMode
 from mewcode.permissions.rules import extract_content
@@ -32,6 +44,8 @@ from mewcode.tools.base import (
     ToolCallStart,
     ToolResult,
 )
+
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────
 #  Constants (checklist items)
@@ -116,6 +130,12 @@ class CompactNotification:
     message: str
 
 @dataclass
+class PersistNotification:
+    tool_use_id: str
+    original_chars: int
+    preview_chars: int
+
+@dataclass
 class HookEvent:
     hook_name: str
     message: str
@@ -137,6 +157,7 @@ AgentEvent = Union[
     UsageEvent,
     ErrorEvent,
     CompactNotification,
+    PersistNotification,
     HookEvent,
     PermissionRequest,
 ]
@@ -356,6 +377,8 @@ class Agent:
         self._team_manager: Any = None
         self.session_dir = self._ensure_session_dir(self.work_dir)
         self.compact_breaker = self._create_compact_circuit_breaker()
+        self.replacement_state: ContentReplacementState = create_replacement_state()
+        self.recovery_state: RecoveryState = RecoveryState()
         self.agent_id = uuid.uuid4().hex[:12]
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -368,14 +391,10 @@ class Agent:
             self.permission_checker.mode = mode
 
     def _ensure_session_dir(self, work_dir: Path) -> Path:
-        """Ensure .mewcode/sessions/ directory exists."""
-        session_dir = work_dir / ".mewcode" / "sessions"
-        session_dir.mkdir(parents=True, exist_ok=True)
-        return session_dir
+        return ensure_session_dir(work_dir)
 
     def _create_compact_circuit_breaker(self) -> Any:
         """Create the compact circuit breaker if context module is available."""
-        from mewcode.context import CompactCircuitBreaker
         return CompactCircuitBreaker()
 
     def _get_plan_path(self) -> Path:
@@ -481,7 +500,12 @@ class Agent:
             # Step 2: Apply budget and auto-compact
             compacted = await self._apply_auto_compact(conversation)
             if compacted:
-                yield CompactNotification(message=compacted)
+                pct = int(
+                    conversation.last_input_tokens / self.context_window * 100
+                )
+                yield CompactNotification(
+                    message=f"{compacted} (上下文占用: {conversation.last_input_tokens:,}/{self.context_window:,} tokens, {pct}%)"
+                )
 
             # Trigger pre_send hook
             if self.hook_engine:
@@ -511,9 +535,23 @@ class Agent:
             # Step 5: Get enabled tool schemas
             schemas = self.registry.get_all_schemas(self.protocol)
 
-            # Step 6: Stream LLM response
+            # Step 6: Apply tool result budget (Layer 1) right before stream
+            api_conv, _new_records = apply_tool_result_budget(
+                conversation, self.session_dir, self.replacement_state
+            )
+            if _new_records:
+                append_replacement_records(self.session_dir, _new_records)
+                for rec in _new_records:
+                    if rec.original_chars > 0:
+                        yield PersistNotification(
+                            tool_use_id=rec.tool_use_id,
+                            original_chars=rec.original_chars,
+                            preview_chars=len(rec.replacement),
+                        )
+
+            # Step 7: Stream LLM response
             collector = StreamCollector()
-            stream = self.client.stream(conversation, system=system_prompt, tools=schemas)
+            stream = self.client.stream(api_conv, system=system_prompt, tools=schemas)
             async for ev in collector.consume(stream):
                 yield ev
 
@@ -647,9 +685,16 @@ class Agent:
 
         Returns a notification string if compression happened, None otherwise.
         """
-        from mewcode.context import apply_tool_result_budget, auto_compact
-        apply_tool_result_budget(conversation, self.context_window, self.compact_breaker)
-        changed2 = await auto_compact(conversation, self.client, self.compact_breaker)
+        changed2 = await auto_compact(
+            conversation,
+            self.client,
+            self.context_window,
+            self.session_dir,
+            protocol=self.protocol,
+            breaker=self.compact_breaker,
+            recovery=self.recovery_state,
+            tool_schemas=self.registry.get_all_schemas(self.protocol),
+        )
         if changed2:
             return "Context compressed to fit within window; see sidebar for details."
         return None
@@ -688,15 +733,23 @@ class Agent:
                 try:
                     params = tool.params_model.model_validate(tc.arguments)
                 except Exception as e:
-                    content = f"Parameter validation error for {tc.name}: {e}"
-                    is_error = True
-                    tool = None
+                    if tc.name.startswith("mcp_"):
+                        params = tc.arguments
+                        logger.debug(
+                            "MCP tool %s param validation failed (%s), passing raw args",
+                            tc.name, e,
+                        )
+                    else:
+                        content = f"Parameter validation error for {tc.name}: {e}"
+                        is_error = True
+                        tool = None
 
             if tool and not is_error:
                 try:
                     result = await tool.execute(params)
                     content = result.output
                     is_error = result.is_error
+                    self._snapshot_for_recovery(tc, result)
                 except Exception as e:
                     content = f"Tool execution error ({tc.name}): {e}"
                     is_error = True
@@ -809,17 +862,25 @@ class Agent:
         try:
             params = tool.params_model.model_validate(args)
         except Exception as e:
-            yield ToolResultEvent(
-                tool_id=tc.id,
-                tool_name=tool_name,
-                result=f"Parameter validation error: {e}",
-                is_error=True,
-            )
-            return
+            if tool_name.startswith("mcp_"):
+                params = args
+                logger.debug(
+                    "MCP tool %s param validation failed (%s), passing raw args",
+                    tool_name, e,
+                )
+            else:
+                yield ToolResultEvent(
+                    tool_id=tc.id,
+                    tool_name=tool_name,
+                    result=f"Parameter validation error: {e}",
+                    is_error=True,
+                )
+                return
 
         # Execute
         try:
             result: ToolResult = await tool.execute(params)
+            self._snapshot_for_recovery(tc, result)
         except Exception as e:
             yield ToolResultEvent(
                 tool_id=tc.id,
@@ -854,3 +915,30 @@ class Agent:
             return output[:MAX_OUTPUT_CHARS] + "\n… (output truncated)"
         else:
             return output
+
+    def _snapshot_for_recovery(self, tc: ToolUseBlock, result: ToolResult) -> None:
+        if result.is_error or tc.name != "ReadFile":
+            return
+        file_path = tc.arguments.get("file_path") or tc.arguments.get("path")
+        if not file_path:
+            return
+        try:
+            content = Path(file_path).read_text(encoding="utf-8", errors="replace")
+            self.recovery_state.record_file_read(str(file_path), content)
+        except OSError:
+            pass
+
+    async def manual_compact(
+        self, conversation: ConversationManager
+    ) -> Optional[str | CompactEvent]:
+        from mewcode.context import manual_compact as _manual_compact
+        return await _manual_compact(
+            conversation,
+            self.client,
+            self.context_window,
+            self.session_dir,
+            protocol=self.protocol,
+            breaker=self.compact_breaker,
+            recovery=self.recovery_state,
+            tool_schemas=self.registry.get_all_schemas(self.protocol),
+        )

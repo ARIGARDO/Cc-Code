@@ -61,9 +61,11 @@ class AgentTool:
         self,
         config: AgentToolConfig,
         provider_config: Any,
+        parent_agent: Any = None,
     ) -> None:
         self._config = config
         self._provider_config = provider_config
+        self._parent_agent = parent_agent
 
     def _select_llm(self) -> Any:
         if self._config.model_override:
@@ -72,3 +74,13 @@ class AgentTool:
             )
         from mewcode.client import create_client
         return create_client(self._provider_config)
+
+    def _inject_replacement_state(self, sub_agent: Any) -> None:
+        if self._parent_agent is None:
+            return
+        p = self._config
+        if getattr(p, "subagent_type", None) is None:
+            from mewcode.context import clone_replacement_state
+            sub_agent.replacement_state = clone_replacement_state(
+                self._parent_agent.replacement_state
+            )

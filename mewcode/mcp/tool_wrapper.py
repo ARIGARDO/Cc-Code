@@ -108,11 +108,13 @@ class MCPToolWrapper(Tool):
         )
 
     def get_schema(self) -> dict[str, Any]:
-        """Return the original MCP ``inputSchema`` directly."""
+        """Return the MCP ``inputSchema``, cleaned for LLM consumption."""
         schema = getattr(self._tool_def, "inputSchema", None)
-        if schema and isinstance(schema, dict):
-            return schema
-        return {"type": "object", "properties": {}}
+        if not schema or not isinstance(schema, dict):
+            return {"type": "object", "properties": {}}
+        cleaned = {k: v for k, v in schema.items()
+                   if k not in ("$schema", "additionalProperties", "title")}
+        return cleaned
 
     async def execute(self, params: Any) -> ToolResult:
         """Call the MCP tool, with lazy reconnect on dead session."""

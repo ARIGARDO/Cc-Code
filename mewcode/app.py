@@ -32,6 +32,7 @@ from mewcode.agent import (
     ErrorEvent,
     HookEvent,
     LoopComplete,
+    PersistNotification,
     PermissionMode,
     PermissionRequest,
     PermissionResponse,
@@ -73,16 +74,27 @@ class MewCodeApp(App):
     Screen {
         layout: vertical;
         background: $surface;
+        height: 100%;
+    }
+    TUILayout {
+        height: 1fr;
     }
     #user_input {
         padding: 0 1;
         border-top: solid $primary;
+        height: auto;
     }
     #mode_bar {
         height: 1;
         padding: 0 1;
         color: $text-disabled;
         background: $surface;
+    }
+    #permission_area {
+        height: auto;
+        width: 100%;
+        background: $surface;
+        display: none;
     }
     """
 
@@ -124,6 +136,7 @@ class MewCodeApp(App):
 
     def compose(self) -> ComposeResult:
         yield TUILayout()
+        yield Static(id="permission_area")
         yield Input(placeholder="Send a message...", id="user_input")
         yield Static(self._mode_label(), id="mode_bar")
 
@@ -204,11 +217,18 @@ class MewCodeApp(App):
             mode=PermissionMode.DEFAULT,
         )
 
+        context_window = 200_000
+        if self._provider:
+            cw = self._raw_providers[0].get("context_window") if self._raw_providers else None
+            if cw and isinstance(cw, int) and cw > 0:
+                context_window = cw
+
         self.agent = Agent(
             client=self.client,
             registry=self.registry,
             protocol=protocol,
             work_dir=work_dir,
+            context_window=context_window,
             permission_checker=self._permission_checker,
             instructions_content="You are MewCode, a terminal AI coding assistant.",
         )
@@ -261,6 +281,22 @@ class MewCodeApp(App):
         parts = stripped.split(None, 1)
         cmd = parts[0].lower()
         arg = parts[1].strip() if len(parts) > 1 else ""
+
+        if cmd in ("/help", "/h", "/?"):
+            lines = [
+                "\033[1m可用命令:\033[0m",
+                "  /compact, /cmp  — 手动压缩上下文",
+                "  /plan           — 切换到 Plan 模式",
+                "  /do             — 切换到 Default 模式",
+                "  /do yolo        — 切换到 Bypass 模式",
+                "  /mode [name]    — 查看/切换权限模式",
+                "  /next, /n       — 循环切换权限模式",
+                "  /clear          — 清空对话历史",
+                "  /help, /h       — 显示此帮助",
+            ]
+            for line in lines:
+                self._append_chat_line(line)
+            return True
 
         if cmd == "/plan":
             self._set_plan_mode(True)
@@ -320,6 +356,17 @@ class MewCodeApp(App):
             self._update_mode_bar()
             return True
 
+        if cmd in ("/compact", "/cmp"):
+            self.run_worker(self._do_compact(), exclusive=False)
+            return True
+
+        if cmd == "/clear":
+            self.conversation.clear()
+            if self._chat_output:
+                self._chat_output.clear_output()
+            self._append_chat_line("\033[90m[CLEAR] 对话已清空\033[0m")
+            return True
+
         return False
 
     def _set_plan_mode(self, enabled: bool) -> None:
@@ -330,6 +377,24 @@ class MewCodeApp(App):
         else:
             self.agent.set_permission_mode(PermissionMode.DEFAULT)
         self._update_mode_bar()
+
+    async def _do_compact(self) -> None:
+        if self.agent is None:
+            self._append_chat_line("\033[31m[COMPACT] Agent not initialized\033[0m")
+            return
+        self._append_chat_line("\033[34m[COMPACT] 正在压缩上下文...\033[0m")
+        result = await self.agent.manual_compact(self.conversation)
+        if result:
+            pct = int(
+                self.conversation.last_input_tokens
+                / self.agent.context_window
+                * 100
+            )
+            self._append_chat_line(
+                f"\033[34m[COMPACT] 压缩完成 (上下文占用: {self.conversation.last_input_tokens:,}/{self.agent.context_window:,} tokens, {pct}%)\033[0m"
+            )
+        else:
+            self._append_chat_line("\033[90m[COMPACT] 无需压缩或压缩被跳过\033[0m")
 
     def action_cycle_mode(self) -> None:
         if self.agent is None:
@@ -387,7 +452,7 @@ class MewCodeApp(App):
             self._append_text(event.text)
 
         elif isinstance(event, ThinkingText):
-            self._append_text(f"\033[2m{event.text}\033[0m")
+            pass
 
         elif isinstance(event, ToolUseEvent):
             self._append_chat_line(f"\033[36m[TOOL] {event.tool_name} ...\033[0m")
@@ -396,11 +461,33 @@ class MewCodeApp(App):
             pass
 
         elif isinstance(event, LoopComplete):
-            self._append_chat_line("")  # newline after response
+            self._append_chat_line("")
+            if self._chat_output:
+                self._chat_output._auto_scroll = True
+                self._chat_output.call_after_refresh(
+                    self._chat_output._do_scroll_end
+                )
 
         elif isinstance(event, UsageEvent):
+            total = event.total_input + event.total_output
+            pct = ""
+            if self.agent and self.agent.context_window > 0:
+                ratio = event.total_input / self.agent.context_window * 100
+                pct = f" | 上下文: {ratio:.0f}%"
+                if self._header:
+                    threshold = 80
+                    if ratio >= 90:
+                        tag = "⚠️ 上下文即将满"
+                    elif ratio >= threshold:
+                        tag = "上下文较满"
+                    else:
+                        tag = ""
+                    self._header.context_info = (
+                        f"Tokens: {event.total_input:,}/{self.agent.context_window:,} ({ratio:.0f}%) {tag}"
+                    )
             self._append_chat_line(
-                f"\033[90m[USAGE] In: {event.input_tokens} | Out: {event.output_tokens}\033[0m"
+                f"\033[90m[USAGE] 本轮 In: {event.input_tokens:,} Out: {event.output_tokens:,}"
+                f" | 累计: {total:,} tokens{pct}\033[0m"
             )
 
         elif isinstance(event, ErrorEvent):
@@ -412,13 +499,20 @@ class MewCodeApp(App):
         elif isinstance(event, CompactNotification):
             self._append_chat_line(f"\033[34m[COMPACT] {event.message}\033[0m")
 
+        elif isinstance(event, PersistNotification):
+            orig_kb = event.original_chars / 1024
+            prev_kb = event.preview_chars / 1024
+            self._append_chat_line(
+                f"\033[33m[PERSIST] 工具结果 {event.tool_use_id[:16]}… "
+                f"过大已存盘 ({orig_kb:.1f}KB → 预览 {prev_kb:.1f}KB)\033[0m"
+            )
+
         elif isinstance(event, HookEvent):
             pass
 
     async def _ask_permission(self, event: PermissionRequest) -> PermissionResponse:
         from mewcode.permission_dialog import PermissionSelector
         from mewcode.permissions.rules import extract_content
-        from mewcode.tui import TUILayout
         tool_name = event.tool_name
         args = event.tool_args
         content = extract_content(tool_name, args)
@@ -430,6 +524,10 @@ class MewCodeApp(App):
         def _on_confirm(result: PermissionResponse) -> None:
             if not future.done():
                 future.set_result(result)
+            perm_area = self.query_one("#permission_area", Static)
+            if perm_area:
+                perm_area.styles.display = "none"
+                perm_area.remove_children()
 
         selector = PermissionSelector(
             tool_name=tool_name,
@@ -438,13 +536,13 @@ class MewCodeApp(App):
             id="perm_selector",
         )
 
-        layout = self.query_one(TUILayout)
-        await layout.mount(selector)
+        perm_area = self.query_one("#permission_area", Static)
+        await perm_area.mount(selector)
+        perm_area.styles.display = "block"
         self.call_after_refresh(selector.focus)
 
         result = await future
 
-        selector.remove()
         input_widget = self.query_one("#user_input", Input)
         input_widget.focus()
 
