@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Container, VerticalScroll
 from textual.reactive import reactive
@@ -193,7 +194,9 @@ class ChatOutput(VerticalScroll):
         self._ensure_visible()
         self._lines.append(text)
         if self._content_widget:
-            self._content_widget.update("".join(self._lines))
+            full_text = "".join(self._lines)
+            rich_text = Text.from_ansi(full_text)
+            self._content_widget.update(rich_text)
         if self._auto_scroll and not self._pending_scroll:
             self._pending_scroll = True
             self.call_after_refresh(self._schedule_scroll)

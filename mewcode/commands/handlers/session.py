@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from typing import Any
+from mewcode.commands.registry import Command, CommandContext, CommandType
 
 
-def handle_session(ctx: Any, subcmd: str = "") -> None:
-    session_manager = getattr(ctx, "session_manager", None)
-    session = getattr(ctx, "session", None)
+async def handle_session(ctx: CommandContext) -> None:
+    session_manager = ctx.session_manager
+    session = ctx.session
 
     if session_manager is None:
         ctx.ui.add_system_message("会话管理器未初始化")
         return
 
-    parts = subcmd.strip().split(None, 1)
+    parts = ctx.args.strip().split(None, 1)
     cmd = parts[0].lower() if parts else ""
     arg = parts[1].strip() if len(parts) > 1 else ""
 
-    if cmd == "" and not subcmd.strip():
+    if cmd == "" and not ctx.args.strip():
         if session and session.meta:
             m = session.meta
             ctx.ui.add_system_message(
@@ -62,18 +62,21 @@ def handle_session(ctx: Any, subcmd: str = "") -> None:
                 )
             lines.append("\n使用 /session resume <序号或ID> 恢复")
             ctx.ui.add_system_message("\n".join(lines))
-            if hasattr(ctx, "config") and ctx.config is not None:
-                ctx.config["_resume_candidates"] = candidates
+            ctx.config["_resume_candidates"] = candidates
             return
 
-        candidates = getattr(ctx, "config", {}).get("_resume_candidates", []) if hasattr(ctx, "config") and ctx.config else []
-        if session_id.isdigit() and candidates:
+        candidates = ctx.config.get("_resume_candidates", [])
+        if session_id.isdigit():
             idx = int(session_id) - 1
-            if 0 <= idx < len(candidates):
+            if candidates and 0 <= idx < len(candidates):
                 session_id = candidates[idx]
             else:
-                ctx.ui.add_system_message(f"无效序号: {session_id}")
-                return
+                metas = session_manager.list()
+                if 0 <= idx < len(metas):
+                    session_id = metas[idx].id
+                else:
+                    ctx.ui.add_system_message(f"序号超出范围: {arg}")
+                    return
 
         result = session_manager.resume(session_id)
         if result is None:
@@ -83,7 +86,7 @@ def handle_session(ctx: Any, subcmd: str = "") -> None:
         if session:
             session.close()
 
-        set_session = getattr(ctx, "config", {}).get("set_session") if hasattr(ctx, "config") and ctx.config else None
+        set_session = ctx.config.get("set_session")
         if set_session:
             set_session(result.session)
 
@@ -96,14 +99,14 @@ def handle_session(ctx: Any, subcmd: str = "") -> None:
         if gap_msg:
             new_conv.add_user_message(gap_msg.content)
 
-        set_conversation = getattr(ctx, "config", {}).get("set_conversation") if hasattr(ctx, "config") and ctx.config else None
+        set_conversation = ctx.config.get("set_conversation")
         if set_conversation:
             set_conversation(new_conv)
 
-        if hasattr(ctx, "agent") and ctx.agent:
+        if ctx.agent:
             ctx.agent._loop_count = 0
 
-        render_restored = getattr(ctx, "config", {}).get("render_restored") if hasattr(ctx, "config") and ctx.config else None
+        render_restored = ctx.config.get("render_restored")
         if render_restored:
             render_restored()
 
@@ -113,20 +116,20 @@ def handle_session(ctx: Any, subcmd: str = "") -> None:
         if session:
             session.close()
         new_session = session_manager.create()
-        set_session = getattr(ctx, "config", {}).get("set_session") if hasattr(ctx, "config") and ctx.config else None
+        set_session = ctx.config.get("set_session")
         if set_session:
             set_session(new_session)
 
         from mewcode.conversation import ConversationManager
         new_conv = ConversationManager()
-        set_conversation = getattr(ctx, "config", {}).get("set_conversation") if hasattr(ctx, "config") and ctx.config else None
+        set_conversation = ctx.config.get("set_conversation")
         if set_conversation:
             set_conversation(new_conv)
 
-        if hasattr(ctx, "agent") and ctx.agent:
+        if ctx.agent:
             ctx.agent._loop_count = 0
 
-        clear_chat = getattr(ctx, "config", {}).get("clear_chat") if hasattr(ctx, "config") and ctx.config else None
+        clear_chat = ctx.config.get("clear_chat")
         if clear_chat:
             clear_chat()
 
@@ -134,9 +137,17 @@ def handle_session(ctx: Any, subcmd: str = "") -> None:
 
     elif cmd == "delete":
         if not arg:
-            ctx.ui.add_system_message("用法: /session delete <会话ID>")
+            ctx.ui.add_system_message("用法: /session delete <序号或会话ID>")
             return
-        deleted = session_manager.delete(arg)
+        delete_id = arg
+        try:
+            idx = int(arg) - 1
+            metas = session_manager.list()
+            if 0 <= idx < len(metas):
+                delete_id = metas[idx].id
+        except ValueError:
+            pass
+        deleted = session_manager.delete(delete_id)
         if deleted:
             ctx.ui.add_system_message(f"已删除会话: {arg}")
         else:
@@ -146,9 +157,10 @@ def handle_session(ctx: Any, subcmd: str = "") -> None:
         ctx.ui.add_system_message("用法: /session [list | resume | new | delete]")
 
 
-SESSION_COMMAND = {
-    "name": "session",
-    "description": "会话管理",
-    "usage": "/session [list | resume <id> | new | delete <id>]",
-    "handler": handle_session,
-}
+SESSION_COMMAND = Command(
+    name="session",
+    description="会话管理",
+    type=CommandType.LOCAL_UI,
+    handler=handle_session,
+    usage="/session [list | resume <id> | new | delete <id>]",
+)

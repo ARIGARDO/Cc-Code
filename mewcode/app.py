@@ -55,6 +55,10 @@ from mewcode.memory import (
     SessionManager,
     load_instructions,
 )
+from mewcode.commands.registry import CommandRegistry, CommandContext
+from mewcode.commands.parser import parse_command, complete
+from mewcode.commands.handlers import register_all_commands
+from mewcode.commands.completion import CompletionPopup
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +148,10 @@ class MewCodeApp(App):
         self._streaming_worker: Optional[Any] = None
         self._history_len_before: int = 0
 
+        # Command system (ch10)
+        self.command_registry = CommandRegistry()
+        register_all_commands(self.command_registry)
+
         # UI widget references (set in on_mount)
         self._header: Optional[MewCodeHeader] = None
         self._mcp_status: Optional[MCPStatus] = None
@@ -153,6 +161,7 @@ class MewCodeApp(App):
 
     def compose(self) -> ComposeResult:
         yield TUILayout()
+        yield CompletionPopup()
         yield Static(id="permission_area")
         yield Input(placeholder="Send a message...", id="user_input")
         yield Static(self._mode_label(), id="mode_bar")
@@ -264,6 +273,10 @@ class MewCodeApp(App):
             self._header.version = "v0.1.0"
             self._header.model_name = model_display
 
+        # Register factory commands (ch10 T5)
+        from mewcode.commands.handlers.review import REVIEW_COMMAND
+        self.command_registry.register_sync(REVIEW_COMMAND)
+
     async def _init_mcp(self) -> None:
         from mewcode.mcp import MCPManager
 
@@ -297,113 +310,88 @@ class MewCodeApp(App):
                 logger.debug("MCP shutdown error: %s", e)
             self._mcp_manager = None
 
-    # ── Slash command handling ────────────────
+    # ── Slash command handling (ch10) ─────────
 
-    def handle_command(self, text: str) -> bool:
-        stripped = text.strip()
-        if not stripped.startswith("/"):
+    def _build_command_context(self, args: str = "") -> CommandContext:
+        return CommandContext(
+            args=args,
+            agent=self.agent,
+            conversation=self.conversation,
+            session=self.session,
+            session_manager=self.session_manager,
+            memory_manager=self.memory_manager,
+            ui=self._ui_controller(),
+            config={
+                "registry": self.command_registry,
+                "set_session": self._set_session,
+                "set_conversation": self._set_conversation,
+                "clear_chat": self._clear_chat,
+                "render_restored": self._render_restored,
+                "work_dir": str(self._work_dir),
+                "skill_loader": getattr(self, "_skill_loader", None),
+                "skill_executor": getattr(self, "_skill_executor", None),
+                "skill_reload": getattr(self, "_skill_reload", None),
+            },
+        )
+
+    def _ui_controller(self) -> Any:
+        app = self
+
+        class _UI:
+            def add_system_message(self, msg: str) -> None:
+                app._append_chat_line(f"\033[36m│\033[0m {msg}")
+
+            def send_user_message(self, text: str) -> None:
+                app.run_worker(app.process_message(text), exclusive=False)
+
+            def set_plan_mode(self, enabled: bool) -> None:
+                app._set_plan_mode(enabled)
+
+            def get_token_count(self) -> tuple[int, int]:
+                if app.agent:
+                    return (app.agent.total_input_tokens, app.agent.total_output_tokens)
+                return (0, 0)
+
+            def refresh_status(self) -> None:
+                pass
+
+        return _UI()
+
+    def _set_session(self, session: Any) -> None:
+        self.session = session
+
+    def _set_conversation(self, conv: ConversationManager) -> None:
+        self.conversation = conv
+
+    def _clear_chat(self) -> None:
+        if self._chat_output:
+            self._chat_output.clear_output()
+
+    def _render_restored(self) -> None:
+        if self._chat_output:
+            self._chat_output.clear_output()
+
+    async def _dispatch_command(self, text: str) -> bool:
+        name, args, is_command = parse_command(text)
+        if not is_command:
             return False
-
-        parts = stripped.split(None, 1)
-        cmd = parts[0].lower()
-        arg = parts[1].strip() if len(parts) > 1 else ""
-
-        if cmd in ("/help", "/h", "/?"):
-            lines = [
-                "\033[1m可用命令:\033[0m",
-                "  /compact, /cmp  — 手动压缩上下文",
-                "  /memory [list|clear|edit] — 记忆管理",
-                "  /session [list|resume|new|delete] — 会话管理",
-                "  /plan           — 切换到 Plan 模式",
-                "  /do             — 切换到 Default 模式",
-                "  /do yolo        — 切换到 Bypass 模式",
-                "  /mode [name]    — 查看/切换权限模式",
-                "  /next, /n       — 循环切换权限模式",
-                "  /clear          — 清空对话历史",
-                "  /help, /h       — 显示此帮助",
-            ]
-            for line in lines:
-                self._append_chat_line(line)
+        if not name:
             return True
 
-        if cmd == "/plan":
-            self._set_plan_mode(True)
-            self._append_chat_line("[MODE] Switched to Plan mode")
+        cmd = self.command_registry.find(name)
+        if cmd is None:
+            self._append_chat_line(f"\033[31m未知命令: /{name}\033[0m")
             return True
 
-        if cmd == "/do":
-            if arg.lower() in ("yolo", "bypass"):
-                if self.agent:
-                    self.agent.set_permission_mode(PermissionMode.BYPASS)
-                    if self._permission_checker:
-                        self._permission_checker.mode = PermissionMode.BYPASS
-                self._append_chat_line("[MODE] Switched to Bypass mode (YOLO)")
-                self._update_mode_bar()
-            else:
-                self._set_plan_mode(False)
-                self._append_chat_line("[MODE] Switched to Default mode")
-            return True
-
-        if cmd in ("/next", "/n"):
-            self.action_cycle_mode()
-            current = self.agent.permission_mode if self.agent else PermissionMode.DEFAULT
-            self._append_chat_line(f"[MODE] Switched to: {current.value}")
-            return True
-
-        if cmd == "/mode":
-            if not arg:
-                current = self.agent.permission_mode if self.agent else PermissionMode.DEFAULT
-                self._append_chat_line(f"[MODE] Current: {current.value}")
-                self._append_chat_line("[MODE] Available: default, acceptEdits, plan, bypassPermissions, custom, dontAsk")
-                return True
-            if arg == "next":
-                self.action_cycle_mode()
-                current = self.agent.permission_mode if self.agent else PermissionMode.DEFAULT
-                self._append_chat_line(f"[MODE] Switched to: {current.value}")
-                return True
-            mode_map = {
-                "default": PermissionMode.DEFAULT,
-                "acceptEdits": PermissionMode.ACCEPT_EDITS,
-                "accept": PermissionMode.ACCEPT_EDITS,
-                "plan": PermissionMode.PLAN,
-                "bypassPermissions": PermissionMode.BYPASS,
-                "bypass": PermissionMode.BYPASS,
-                "custom": PermissionMode.CUSTOM,
-                "dontAsk": PermissionMode.DONT_ASK,
-            }
-            new_mode = mode_map.get(arg)
-            if new_mode is None:
-                self._append_chat_line(f"[MODE] Unknown mode: {arg}")
-                self._append_chat_line(f"[MODE] Available: {', '.join(mode_map.keys())}")
-                return True
-            if self.agent:
-                self.agent.set_permission_mode(new_mode)
-            if self._permission_checker:
-                self._permission_checker.mode = new_mode
-            self._append_chat_line(f"[MODE] Switched to: {new_mode.value}")
-            self._update_mode_bar()
-            return True
-
-        if cmd == "/memory":
-            self._handle_memory(arg)
-            return True
-
-        if cmd == "/session":
-            self._handle_session(arg)
-            return True
-
-        if cmd in ("/compact", "/cmp"):
-            self.run_worker(self._do_compact(), exclusive=False)
-            return True
-
-        if cmd == "/clear":
-            self.conversation.clear()
-            if self._chat_output:
-                self._chat_output.clear_output()
-            self._append_chat_line("\033[90m[CLEAR] 对话已清空\033[0m")
-            return True
-
-        return False
+        ctx = self._build_command_context(args)
+        try:
+            result = cmd.handler(ctx)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as e:
+            self._append_chat_line(f"\033[31m命令执行失败: /{name}: {e}\033[0m")
+            logger.exception("Command /%s failed", name)
+        return True
 
     def _set_plan_mode(self, enabled: bool) -> None:
         if self.agent is None:
@@ -447,151 +435,11 @@ class MewCodeApp(App):
             self._permission_checker.mode = new_mode
         self._update_mode_bar()
 
-    # ── Memory & Session command helpers ──────
-
-    def _handle_memory(self, subcmd: str) -> None:
-        if self.memory_manager is None:
-            self._append_chat_line("\033[90m[MEMORY] 记忆管理器未初始化\033[0m")
-            return
-        cmd = subcmd.strip().lower()
-        if cmd in ("", "list"):
-            text = self.memory_manager.get_display_text()
-            self._append_chat_line(f"\033[36m[MEMORY]\033[0m {text}")
-        elif cmd == "clear":
-            self.memory_manager.clear()
-            self._append_chat_line("\033[36m[MEMORY] 所有自动记忆已清空。\033[0m")
-        elif cmd == "edit":
-            self._append_chat_line(f"\033[36m[MEMORY] 用户级: {self.memory_manager.user_path}\033[0m")
-            self._append_chat_line(f"\033[36m[MEMORY] 项目级: {self.memory_manager.project_path}\033[0m")
-        else:
-            self._append_chat_line("\033[36m[MEMORY] 用法: /memory [list | clear | edit]\033[0m")
-
-    def _handle_session(self, subcmd: str) -> None:
-        if self.session_manager is None:
-            self._append_chat_line("\033[90m[SESSION] 会话管理器未初始化\033[0m")
-            return
-
-        parts = subcmd.strip().split(None, 1)
-        cmd = parts[0].lower() if parts else ""
-        arg = parts[1].strip() if len(parts) > 1 else ""
-
-        if cmd == "" and not subcmd.strip():
-            if self.session and self.session.meta:
-                m = self.session.meta
-                self._append_chat_line(
-                    f"\033[36m[SESSION] 当前会话: {m.id}\n"
-                    f"  标题: {m.title or '(无)'}\n"
-                    f"  消息数: {m.message_count}\n"
-                    f"  Token: {m.total_tokens:,}\n"
-                    f"  最后活跃: {m.last_active.strftime('%Y-%m-%d %H:%M')}\033[0m"
-                )
-            else:
-                self._append_chat_line("\033[90m[SESSION] 无活跃会话\033[0m")
-            return
-
-        if cmd == "list":
-            metas = self.session_manager.list()[:10]
-            if not metas:
-                self._append_chat_line("\033[90m[SESSION] 没有历史会话\033[0m")
-                return
-            lines = ["\033[36m[SESSION] 历史会话:\033[0m"]
-            for i, m in enumerate(metas, 1):
-                lines.append(
-                    f"  {i}. [{m.id}] {m.title or '(无标题)'} "
-                    f"- {m.message_count}条消息 "
-                    f"- {m.last_active.strftime('%m-%d %H:%M')}"
-                )
-            self._append_chat_line("\n".join(lines))
-
-        elif cmd == "resume":
-            session_id = arg
-            if not session_id:
-                metas = self.session_manager.list()[:15]
-                if not metas:
-                    self._append_chat_line("\033[90m[SESSION] 没有可恢复的会话\033[0m")
-                    return
-                lines = ["\033[36m[SESSION] 可恢复的会话:\033[0m"]
-                for i, m in enumerate(metas, 1):
-                    lines.append(
-                        f"  {i}. [{m.id}] {m.title or '(无标题)'} "
-                        f"- {m.last_active.strftime('%m-%d %H:%M')}"
-                    )
-                lines.append("使用 /session resume <序号或ID> 恢复")
-                self._append_chat_line("\n".join(lines))
-                return
-
-            try:
-                idx = int(session_id) - 1
-                metas = self.session_manager.list()
-                if 0 <= idx < len(metas):
-                    session_id = metas[idx].id
-                else:
-                    self._append_chat_line(f"\033[31m[SESSION] 序号超出范围: {arg} (共{len(metas)}个会话)\033[0m")
-                    return
-            except ValueError:
-                pass
-
-            result = self.session_manager.resume(session_id)
-            if result is None:
-                self._append_chat_line(f"\033[31m[SESSION] 无法恢复会话: {session_id}\033[0m")
-                return
-
-            if self.session:
-                self.session.close()
-
-            self.session = result.session
-            new_conv = ConversationManager()
-            new_conv.replace_history(result.messages)
-
-            from mewcode.memory.session import build_time_gap_message
-            gap_msg = build_time_gap_message(result.last_active)
-            if gap_msg:
-                new_conv.add_user_message(gap_msg.content)
-
-            self.conversation = new_conv
-            if self.agent:
-                self.agent._loop_count = 0
-
-            if self._chat_output:
-                self._chat_output.clear_output()
-            self._append_chat_line(f"\033[36m[SESSION] 已恢复会话: {session_id}\033[0m")
-
-        elif cmd == "new":
-            if self.session:
-                self.session.close()
-            self.session = self.session_manager.create()
-            self.conversation = ConversationManager()
-            if self.agent:
-                self.agent._loop_count = 0
-            if self._chat_output:
-                self._chat_output.clear_output()
-            self._append_chat_line("\033[36m[SESSION] 已创建新会话\033[0m")
-
-        elif cmd == "delete":
-            if not arg:
-                self._append_chat_line("\033[36m[SESSION] 用法: /session delete <序号或会话ID>\033[0m")
-                return
-            delete_id = arg
-            try:
-                idx = int(arg) - 1
-                metas = self.session_manager.list()
-                if 0 <= idx < len(metas):
-                    delete_id = metas[idx].id
-            except ValueError:
-                pass
-            deleted = self.session_manager.delete(delete_id)
-            if deleted:
-                self._append_chat_line(f"\033[36m[SESSION] 已删除会话: {arg}\033[0m")
-            else:
-                self._append_chat_line(f"\033[31m[SESSION] 会话不存在: {arg}\033[0m")
-
-        else:
-            self._append_chat_line("\033[36m[SESSION] 用法: /session [list | resume | new | delete]\033[0m")
-
     # ── Message processing ────────────────────
 
     async def process_message(self, user_input: str) -> None:
-        if self.handle_command(user_input):
+        dispatched = await self._dispatch_command(user_input)
+        if dispatched:
             return
         if self.agent is None:
             self._show_error("Agent not initialized. Call start() first.")
@@ -772,6 +620,9 @@ class MewCodeApp(App):
     # ── Textual events ─────────────────────────
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
+        popup = self.query_one(CompletionPopup)
+        if popup.is_visible:
+            popup.hide()
         user_input = event.value
         if not user_input or not user_input.strip():
             return
@@ -779,6 +630,22 @@ class MewCodeApp(App):
         self._streaming_worker = self.run_worker(
             self.process_message(user_input), exclusive=False
         )
+
+    def on_chat_input_tab_complete(self, event: Input.TabComplete) -> None:
+        text = event.input.value.strip()
+        if not text.startswith("/"):
+            return
+        matches = complete(self.command_registry, text)
+        if len(matches) == 1:
+            event.input.value = matches[0]
+        elif len(matches) > 1:
+            popup = self.query_one(CompletionPopup)
+            popup.show(matches)
+
+    def on_completion_popup_selected(self, event: CompletionPopup.Selected) -> None:
+        input_widget = self.query_one("#user_input", Input)
+        input_widget.value = event.value
+        input_widget.focus()
 
     def action_abort(self) -> None:
         if self._streaming_worker is not None:

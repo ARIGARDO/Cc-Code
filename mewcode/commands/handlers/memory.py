@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from mewcode.commands.registry import Command, CommandContext, CommandType
 
 
-def handle_memory(ctx: Any, subcmd: str = "") -> None:
-    memory_manager = getattr(ctx, "memory_manager", None)
+async def handle_memory(ctx: CommandContext) -> None:
+    memory_manager = ctx.memory_manager
     if memory_manager is None:
         ctx.ui.add_system_message("记忆管理器未初始化")
         return
 
-    cmd = subcmd.strip().lower() if subcmd else ""
+    cmd = ctx.args.strip().lower()
 
     if cmd in ("", "list"):
         text = memory_manager.get_display_text()
@@ -29,9 +29,10 @@ def handle_memory(ctx: Any, subcmd: str = "") -> None:
         ctx.ui.add_system_message("用法: /memory [list | clear | edit]")
 
 
-MEMORY_COMMAND = {
-    "name": "memory",
-    "description": "记忆管理",
-    "usage": "/memory [list | clear | edit]",
-    "handler": handle_memory,
-}
+MEMORY_COMMAND = Command(
+    name="memory",
+    description="记忆管理",
+    type=CommandType.LOCAL,
+    handler=handle_memory,
+    usage="/memory [list | clear | edit]",
+)
