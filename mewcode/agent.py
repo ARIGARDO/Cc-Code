@@ -19,6 +19,7 @@ from mewcode.conversation import (
     ToolResultBlock,
     ToolUseBlock,
 )
+from mewcode.memory.auto_memory import should_trigger_extraction
 from mewcode.context import (
     CompactCircuitBreaker,
     CompactEvent,
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 #  Constants (checklist items)
 # ──────────────────────────────────────────────
 
-MEMORY_EXTRACTION_INTERVAL = 5
+MEMORY_EXTRACTION_INTERVAL = 3
 MAX_TOKENS_CEILING = 64000
 MAX_OUTPUT_TOKENS_RECOVERIES = 3
 SINGLE_RESULT_CHAR_LIMIT = 32000
@@ -384,6 +385,8 @@ class Agent:
         self.total_output_tokens = 0
         self._plan_path_cache: Optional[Path] = None
         self.active_skills: list[Any] = []
+        self._loop_count: int = 0
+        self._extracting: bool = False
 
     def set_permission_mode(self, mode: PermissionMode) -> None:
         self.permission_mode = mode
@@ -469,10 +472,21 @@ class Agent:
         from mewcode.prompts import build_environment_context
         env_ctx = build_environment_context(work_dir=str(self.work_dir))
         conversation.inject_environment(env_ctx)
+        memory_content = ""
         if self.memory_manager:
             ltm = get_long_term_memory(self.memory_manager)
             if ltm:
-                conversation.inject_long_term_memory(self.instructions_content, ltm)
+                memory_content = ltm
+        if self.instructions_content.strip() or memory_content.strip():
+            conversation.inject_long_term_memory(self.instructions_content, memory_content)
+
+        # Immediate memory extraction: if last user message contains memorable content
+        if self.memory_manager and not self._extracting:
+            for msg in reversed(conversation.history):
+                if msg.role == "user" and msg.content:
+                    if should_trigger_extraction(msg.content):
+                        asyncio.ensure_future(self._extract_memories(conversation))
+                    break
 
         # Trigger session_start hooks
         if self.hook_engine:
@@ -599,12 +613,13 @@ class Agent:
                 thinking_blocks=response.thinking_blocks if response.thinking_blocks else None,
             )
 
+            # Trigger memory extraction on interval (every N turns)
+            self._loop_count += 1
+            if self._loop_count % MEMORY_EXTRACTION_INTERVAL == 0 and self.memory_manager and not self._extracting:
+                asyncio.ensure_future(self._extract_memories(conversation))
+
             # Step 10: Check for termination
             if not response.tool_calls:
-                # Trigger memory extraction on interval
-                if self.memory_manager and iteration % MEMORY_EXTRACTION_INTERVAL == 0:
-                    from mewcode.memory.auto_memory import extract_and_store_memory
-                    extract_and_store_memory(self.memory_manager, conversation)
                 if self.hook_engine:
                     ctx = self._build_hook_context("session_end")
                     self.hook_engine.run_hooks_sync("session_end", ctx)
@@ -932,7 +947,7 @@ class Agent:
         self, conversation: ConversationManager
     ) -> Optional[str | CompactEvent]:
         from mewcode.context import manual_compact as _manual_compact
-        return await _manual_compact(
+        result = await _manual_compact(
             conversation,
             self.client,
             self.context_window,
@@ -942,3 +957,18 @@ class Agent:
             recovery=self.recovery_state,
             tool_schemas=self.registry.get_all_schemas(self.protocol),
         )
+        if result and self.memory_manager:
+            memory_content = self.memory_manager.load()
+            conversation.inject_long_term_memory(self.instructions_content, memory_content)
+        return result
+
+    async def _extract_memories(self, conversation: ConversationManager) -> None:
+        if self._extracting:
+            return
+        self._extracting = True
+        try:
+            await self.memory_manager.extract(self.client, conversation)
+        except Exception as e:
+            logger.debug("Memory extraction error: %s", e)
+        finally:
+            self._extracting = False

@@ -112,12 +112,25 @@ class ConversationManager:
     def inject_long_term_memory(self, instructions: str, memories: str) -> None:
         if self.ltm_injected:
             return
-        body = f"{instructions}\n\n{memories}" if memories else instructions
-        self.history.insert(0, Message(role="user", content=body))
-        self.ltm_injected = True
+
+        base_pos = 1 if self.env_injected else 0
+
+        parts: list[str] = []
+        if instructions.strip():
+            parts.append(f"## 项目指令\n{instructions}")
+        if memories.strip():
+            parts.append(f"## 自动记忆\n{memories}")
+
+        if parts:
+            body = "\n\n".join(parts)
+            self.history.insert(base_pos, Message(role="user", content=body))
+            self.history.insert(base_pos + 1, Message(role="assistant", content="好的，我已了解项目背景和记忆，会优先参考这些信息来回答问题。"))
+            self.ltm_injected = True
 
     def replace_history(self, messages: list[Message]) -> None:
         self.history = list(messages)
+        self.env_injected = False
+        self.ltm_injected = False
 
     def get_messages(self) -> list[Message]:
         return copy.deepcopy(self.history)

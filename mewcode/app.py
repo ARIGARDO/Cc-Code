@@ -49,6 +49,12 @@ from mewcode.permissions.rules import RuleEngine
 from mewcode.permissions.sandbox import PathSandbox
 from mewcode.tui import ChatOutput, MCPStatus, MewCodeHeader, TUILayout
 from mewcode.tools import ToolRegistry, create_default_registry
+from mewcode.memory import (
+    MemoryManager,
+    Session,
+    SessionManager,
+    load_instructions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +106,7 @@ class MewCodeApp(App):
 
     BINDINGS = [
         ("ctrl+c", "quit", "Quit"),
+        ("escape", "abort", "Abort"),
         ("shift+tab", "cycle_mode", "Cycle mode"),
     ]
 
@@ -126,6 +133,16 @@ class MewCodeApp(App):
         self._mcp_ready: bool = False
         self._mcp_instructions: str = ""
         self._mcp_reminder_injected: bool = False
+
+        # Memory system (ch09)
+        self.session_manager: Optional[SessionManager] = None
+        self.session: Optional[Session] = None
+        self.memory_manager: Optional[MemoryManager] = None
+        self._instructions_content: str = ""
+
+        # Streaming state
+        self._streaming_worker: Optional[Any] = None
+        self._history_len_before: int = 0
 
         # UI widget references (set in on_mount)
         self._header: Optional[MewCodeHeader] = None
@@ -219,9 +236,17 @@ class MewCodeApp(App):
 
         context_window = 200_000
         if self._provider:
-            cw = self._raw_providers[0].get("context_window") if self._raw_providers else None
+            raw_providers = self._config.get("providers", [])
+            cw = raw_providers[0].get("context_window") if raw_providers else None
             if cw and isinstance(cw, int) and cw > 0:
                 context_window = cw
+
+        # Initialize memory system (ch09)
+        self._instructions_content = load_instructions(work_dir)
+        self.memory_manager = MemoryManager(work_dir)
+        self.session_manager = SessionManager(work_dir)
+        self.session_manager.cleanup()
+        self.session = self.session_manager.create()
 
         self.agent = Agent(
             client=self.client,
@@ -230,7 +255,8 @@ class MewCodeApp(App):
             work_dir=work_dir,
             context_window=context_window,
             permission_checker=self._permission_checker,
-            instructions_content="You are MewCode, a terminal AI coding assistant.",
+            instructions_content=self._instructions_content,
+            memory_manager=self.memory_manager,
         )
 
         # Update header with model info
@@ -286,6 +312,8 @@ class MewCodeApp(App):
             lines = [
                 "\033[1m可用命令:\033[0m",
                 "  /compact, /cmp  — 手动压缩上下文",
+                "  /memory [list|clear|edit] — 记忆管理",
+                "  /session [list|resume|new|delete] — 会话管理",
                 "  /plan           — 切换到 Plan 模式",
                 "  /do             — 切换到 Default 模式",
                 "  /do yolo        — 切换到 Bypass 模式",
@@ -356,6 +384,14 @@ class MewCodeApp(App):
             self._update_mode_bar()
             return True
 
+        if cmd == "/memory":
+            self._handle_memory(arg)
+            return True
+
+        if cmd == "/session":
+            self._handle_session(arg)
+            return True
+
         if cmd in ("/compact", "/cmp"):
             self.run_worker(self._do_compact(), exclusive=False)
             return True
@@ -411,6 +447,147 @@ class MewCodeApp(App):
             self._permission_checker.mode = new_mode
         self._update_mode_bar()
 
+    # ── Memory & Session command helpers ──────
+
+    def _handle_memory(self, subcmd: str) -> None:
+        if self.memory_manager is None:
+            self._append_chat_line("\033[90m[MEMORY] 记忆管理器未初始化\033[0m")
+            return
+        cmd = subcmd.strip().lower()
+        if cmd in ("", "list"):
+            text = self.memory_manager.get_display_text()
+            self._append_chat_line(f"\033[36m[MEMORY]\033[0m {text}")
+        elif cmd == "clear":
+            self.memory_manager.clear()
+            self._append_chat_line("\033[36m[MEMORY] 所有自动记忆已清空。\033[0m")
+        elif cmd == "edit":
+            self._append_chat_line(f"\033[36m[MEMORY] 用户级: {self.memory_manager.user_path}\033[0m")
+            self._append_chat_line(f"\033[36m[MEMORY] 项目级: {self.memory_manager.project_path}\033[0m")
+        else:
+            self._append_chat_line("\033[36m[MEMORY] 用法: /memory [list | clear | edit]\033[0m")
+
+    def _handle_session(self, subcmd: str) -> None:
+        if self.session_manager is None:
+            self._append_chat_line("\033[90m[SESSION] 会话管理器未初始化\033[0m")
+            return
+
+        parts = subcmd.strip().split(None, 1)
+        cmd = parts[0].lower() if parts else ""
+        arg = parts[1].strip() if len(parts) > 1 else ""
+
+        if cmd == "" and not subcmd.strip():
+            if self.session and self.session.meta:
+                m = self.session.meta
+                self._append_chat_line(
+                    f"\033[36m[SESSION] 当前会话: {m.id}\n"
+                    f"  标题: {m.title or '(无)'}\n"
+                    f"  消息数: {m.message_count}\n"
+                    f"  Token: {m.total_tokens:,}\n"
+                    f"  最后活跃: {m.last_active.strftime('%Y-%m-%d %H:%M')}\033[0m"
+                )
+            else:
+                self._append_chat_line("\033[90m[SESSION] 无活跃会话\033[0m")
+            return
+
+        if cmd == "list":
+            metas = self.session_manager.list()[:10]
+            if not metas:
+                self._append_chat_line("\033[90m[SESSION] 没有历史会话\033[0m")
+                return
+            lines = ["\033[36m[SESSION] 历史会话:\033[0m"]
+            for i, m in enumerate(metas, 1):
+                lines.append(
+                    f"  {i}. [{m.id}] {m.title or '(无标题)'} "
+                    f"- {m.message_count}条消息 "
+                    f"- {m.last_active.strftime('%m-%d %H:%M')}"
+                )
+            self._append_chat_line("\n".join(lines))
+
+        elif cmd == "resume":
+            session_id = arg
+            if not session_id:
+                metas = self.session_manager.list()[:15]
+                if not metas:
+                    self._append_chat_line("\033[90m[SESSION] 没有可恢复的会话\033[0m")
+                    return
+                lines = ["\033[36m[SESSION] 可恢复的会话:\033[0m"]
+                for i, m in enumerate(metas, 1):
+                    lines.append(
+                        f"  {i}. [{m.id}] {m.title or '(无标题)'} "
+                        f"- {m.last_active.strftime('%m-%d %H:%M')}"
+                    )
+                lines.append("使用 /session resume <序号或ID> 恢复")
+                self._append_chat_line("\n".join(lines))
+                return
+
+            try:
+                idx = int(session_id) - 1
+                metas = self.session_manager.list()
+                if 0 <= idx < len(metas):
+                    session_id = metas[idx].id
+                else:
+                    self._append_chat_line(f"\033[31m[SESSION] 序号超出范围: {arg} (共{len(metas)}个会话)\033[0m")
+                    return
+            except ValueError:
+                pass
+
+            result = self.session_manager.resume(session_id)
+            if result is None:
+                self._append_chat_line(f"\033[31m[SESSION] 无法恢复会话: {session_id}\033[0m")
+                return
+
+            if self.session:
+                self.session.close()
+
+            self.session = result.session
+            new_conv = ConversationManager()
+            new_conv.replace_history(result.messages)
+
+            from mewcode.memory.session import build_time_gap_message
+            gap_msg = build_time_gap_message(result.last_active)
+            if gap_msg:
+                new_conv.add_user_message(gap_msg.content)
+
+            self.conversation = new_conv
+            if self.agent:
+                self.agent._loop_count = 0
+
+            if self._chat_output:
+                self._chat_output.clear_output()
+            self._append_chat_line(f"\033[36m[SESSION] 已恢复会话: {session_id}\033[0m")
+
+        elif cmd == "new":
+            if self.session:
+                self.session.close()
+            self.session = self.session_manager.create()
+            self.conversation = ConversationManager()
+            if self.agent:
+                self.agent._loop_count = 0
+            if self._chat_output:
+                self._chat_output.clear_output()
+            self._append_chat_line("\033[36m[SESSION] 已创建新会话\033[0m")
+
+        elif cmd == "delete":
+            if not arg:
+                self._append_chat_line("\033[36m[SESSION] 用法: /session delete <序号或会话ID>\033[0m")
+                return
+            delete_id = arg
+            try:
+                idx = int(arg) - 1
+                metas = self.session_manager.list()
+                if 0 <= idx < len(metas):
+                    delete_id = metas[idx].id
+            except ValueError:
+                pass
+            deleted = self.session_manager.delete(delete_id)
+            if deleted:
+                self._append_chat_line(f"\033[36m[SESSION] 已删除会话: {arg}\033[0m")
+            else:
+                self._append_chat_line(f"\033[31m[SESSION] 会话不存在: {arg}\033[0m")
+
+        else:
+            self._append_chat_line("\033[36m[SESSION] 用法: /session [list | resume | new | delete]\033[0m")
+
     # ── Message processing ────────────────────
 
     async def process_message(self, user_input: str) -> None:
@@ -434,6 +611,12 @@ class MewCodeApp(App):
         self.conversation.add_user_message(user_input)
         self._append_chat_line(f"\x1b[33m> {user_input}\x1b[0m")
 
+        if self.session:
+            from mewcode.conversation import Message
+            self.session.append(Message(role="user", content=user_input))
+
+        self._history_len_before = len(self.conversation.history)
+
         try:
             async for event in self.agent.run(self.conversation):
                 if isinstance(event, PermissionRequest):
@@ -446,6 +629,8 @@ class MewCodeApp(App):
         except Exception as e:
             self._show_error(f"Unexpected error: {e}")
             logger.exception("process_message failed")
+        finally:
+            self._streaming_worker = None
 
     def _render_event(self, event: Any) -> None:
         if isinstance(event, StreamText):
@@ -461,6 +646,13 @@ class MewCodeApp(App):
             pass
 
         elif isinstance(event, LoopComplete):
+            if self.session:
+                start = getattr(self, "_history_len_before", 0)
+                for msg in self.conversation.history[start:]:
+                    if msg.role == "assistant":
+                        self.session.append(msg)
+                    elif msg.role == "user" and msg.tool_results:
+                        self.session.append(msg)
             self._append_chat_line("")
             if self._chat_output:
                 self._chat_output._auto_scroll = True
@@ -580,13 +772,26 @@ class MewCodeApp(App):
     # ── Textual events ─────────────────────────
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        user_input = event.value.strip()
-        if not user_input:
+        user_input = event.value
+        if not user_input or not user_input.strip():
             return
         event.input.value = ""
-        self.run_worker(self.process_message(user_input), exclusive=False)
+        self._streaming_worker = self.run_worker(
+            self.process_message(user_input), exclusive=False
+        )
+
+    def action_abort(self) -> None:
+        if self._streaming_worker is not None:
+            try:
+                self._streaming_worker.cancel()
+            except Exception:
+                pass
+            self._streaming_worker = None
+            self._append_chat_line("\033[33m[ABORT] 已中断当前回复\033[0m")
 
     async def action_quit(self) -> None:
+        if self.session:
+            self.session.close()
         await self._shutdown_mcp()
         self.exit()
 

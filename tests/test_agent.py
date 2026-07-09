@@ -540,8 +540,9 @@ class TestConversationManager:
         conv.inject_long_term_memory("instructions", "mem1\nmem2")
         conv.inject_long_term_memory("instructions2", "mem3")
         msgs = conv.get_messages()
-        assert len(msgs) == 1
-        assert "instructions" in msgs[0].content
+        instr_count = sum(1 for m in msgs if "项目指令" in m.content)
+        assert instr_count == 1
+        assert any("instructions" in m.content for m in msgs)
 
     def test_replace_history(self) -> None:
         conv = ConversationManager()

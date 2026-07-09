@@ -60,6 +60,13 @@ Today's date: {datetime.date.today().isoformat()}
 def get_long_term_memory(memory_manager: Any) -> Optional[str]:
     if memory_manager is None:
         return None
+    if hasattr(memory_manager, "load"):
+        try:
+            content = memory_manager.load()
+            if content:
+                return content
+        except Exception:
+            pass
     if hasattr(memory_manager, "get_all_memories"):
         try:
             entries = memory_manager.get_all_memories()

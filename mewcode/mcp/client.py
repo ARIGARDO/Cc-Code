@@ -8,6 +8,7 @@ transport selection. The entire transport + session lifecycle is managed by an
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import AsyncExitStack
 from typing import Any, Optional
 
@@ -55,7 +56,22 @@ class MCPClient:
             args=list(self.config.args),
             env=build_child_env(self.config.env),
         )
-        read, write = await self._stack.enter_async_context(stdio_client(params))  # type: ignore[union-attr]
+        saved_stderr_fd = None
+        devnull_fd = None
+        try:
+            devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            saved_stderr_fd = os.dup(2)
+            os.dup2(devnull_fd, 2)
+            read, write = await self._stack.enter_async_context(stdio_client(params))  # type: ignore[union-attr]
+        finally:
+            if saved_stderr_fd is not None:
+                os.dup2(saved_stderr_fd, 2)
+                os.close(saved_stderr_fd)
+            if devnull_fd is not None:
+                try:
+                    os.close(devnull_fd)
+                except OSError:
+                    pass
         self._session = await self._stack.enter_async_context(  # type: ignore[union-attr]
             ClientSession(read, write)
         )
