@@ -384,7 +384,8 @@ class Agent:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self._plan_path_cache: Optional[Path] = None
-        self.active_skills: list[Any] = []
+        self.active_skills: dict[str, str] = {}
+        self._skill_catalog: str = ""
         self._loop_count: int = 0
         self._extracting: bool = False
 
@@ -392,6 +393,15 @@ class Agent:
         self.permission_mode = mode
         if self.permission_checker:
             self.permission_checker.mode = mode
+
+    def activate_skill(self, name: str, prompt_body: str) -> None:
+        self.active_skills[name] = prompt_body
+
+    def clear_active_skills(self) -> None:
+        self.active_skills.clear()
+
+    def set_skill_catalog(self, catalog: str) -> None:
+        self._skill_catalog = catalog
 
     def _ensure_session_dir(self, work_dir: Path) -> Path:
         return ensure_session_dir(work_dir)
@@ -470,7 +480,11 @@ class Agent:
         # Inject environment and long-term memory once at start
         from mewcode.context import get_long_term_memory
         from mewcode.prompts import build_environment_context
-        env_ctx = build_environment_context(work_dir=str(self.work_dir))
+        env_ctx = build_environment_context(
+            work_dir=str(self.work_dir),
+            active_skills=self.active_skills if self.active_skills else None,
+            skill_catalog=self._skill_catalog if self._skill_catalog else None,
+        )
         conversation.inject_environment(env_ctx)
         memory_content = ""
         if self.memory_manager:

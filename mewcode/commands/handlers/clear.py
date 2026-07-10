@@ -11,6 +11,8 @@ async def handle_clear(ctx: CommandContext) -> None:
         clear_chat()
     if ctx.conversation:
         ctx.conversation.clear()
+    if ctx.agent:
+        ctx.agent.clear_active_skills()
     ctx.ui.add_system_message("对话已清空")
 
 

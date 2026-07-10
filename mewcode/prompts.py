@@ -299,7 +299,7 @@ def build_system_prompt(
 
 def build_environment_context(
     work_dir: str,
-    active_skills: Optional[list[str]] = None,
+    active_skills: Optional[dict[str, str] | list[str]] = None,
     skill_catalog: Optional[str] = None,
     agent_catalog: Optional[str] = None,
 ) -> str:
@@ -322,7 +322,13 @@ def build_environment_context(
 
     if active_skills:
         parts.append("## Active Skills")
-        for skill_name in active_skills:
-            parts.append(f"### Skill: {skill_name}")
+        if isinstance(active_skills, dict):
+            for skill_name, skill_body in active_skills.items():
+                parts.append(f"### Skill: {skill_name}")
+                if skill_body:
+                    parts.append(skill_body)
+        else:
+            for skill_name in active_skills:
+                parts.append(f"### Skill: {skill_name}")
 
     return "\n".join(parts)

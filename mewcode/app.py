@@ -257,6 +257,11 @@ class MewCodeApp(App):
         self.session_manager.cleanup()
         self.session = self.session_manager.create()
 
+        # Register LoadSkill tool before Agent construction (ch11 T8)
+        from mewcode.tools.load_skill import LoadSkill
+        self._load_skill_tool = LoadSkill()
+        self.registry.register(self._load_skill_tool)
+
         self.agent = Agent(
             client=self.client,
             registry=self.registry,
@@ -268,14 +273,36 @@ class MewCodeApp(App):
             memory_manager=self.memory_manager,
         )
 
+        # Skill system (ch11 T10)
+        from mewcode.skills.loader import SkillLoader
+        from mewcode.skills.executor import SkillExecutor
+        self.skill_loader = SkillLoader(work_dir)
+        self.skill_loader.load_all()
+        self._load_skill_tool.set_loader(self.skill_loader)
+        self._load_skill_tool.set_agent(self.agent)
+        self.skill_executor = SkillExecutor(
+            agent=self.agent,
+            client=self.client,
+            protocol=protocol,
+        )
+
+        catalog = self.skill_loader.get_catalog()
+        if catalog:
+            catalog_lines = ["You can use the following Skills:\n"]
+            for sname, sdesc in catalog:
+                catalog_lines.append(f"- {sname}: {sdesc}")
+            catalog_lines.append("\nIf the user's request matches a Skill, call LoadSkill to activate it.")
+            self.agent.set_skill_catalog("\n".join(catalog_lines))
+
+        from mewcode.commands.handlers.skill_register import register_skill_commands
+        register_skill_commands(self.command_registry, self.skill_loader, self.skill_executor)
+
         # Update header with model info
         if self._header and self._provider:
             self._header.version = "v0.1.0"
             self._header.model_name = model_display
 
-        # Register factory commands (ch10 T5)
-        from mewcode.commands.handlers.review import REVIEW_COMMAND
-        self.command_registry.register_sync(REVIEW_COMMAND)
+
 
     async def _init_mcp(self) -> None:
         from mewcode.mcp import MCPManager
@@ -328,9 +355,8 @@ class MewCodeApp(App):
                 "clear_chat": self._clear_chat,
                 "render_restored": self._render_restored,
                 "work_dir": str(self._work_dir),
-                "skill_loader": getattr(self, "_skill_loader", None),
-                "skill_executor": getattr(self, "_skill_executor", None),
-                "skill_reload": getattr(self, "_skill_reload", None),
+                "skill_loader": getattr(self, "skill_loader", None),
+                "skill_executor": getattr(self, "skill_executor", None),
             },
         )
 

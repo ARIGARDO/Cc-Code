@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {
+      "name": "parse_resume",
+      "description": "Parse a resume file and extract structured information about skills, experience, and education",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Path to the resume file (PDF, TXT, or MD)"
+          }
+        },
+        "required": []
+      }
+    }
+  ]
+}
