@@ -118,6 +118,7 @@ class MewCodeApp(App):
         self,
         config: dict[str, Any],
         mcp_servers: Optional[list[MCPServerConfig]] = None,
+        hook_engine: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -130,6 +131,7 @@ class MewCodeApp(App):
         self._provider: Optional[ProviderConfig] = None
         self._work_dir: Path = Path.cwd()
         self._permission_checker: Optional[PermissionChecker] = None
+        self.hook_engine = hook_engine
 
         # MCP integration (T9 / ch07)
         self._mcp_server_configs: list[MCPServerConfig] = list(mcp_servers or [])
@@ -183,6 +185,11 @@ class MewCodeApp(App):
         """Async initialization called after mount."""
         try:
             await self._start_agent()
+            # Trigger startup hook
+            if self.hook_engine:
+                from mewcode.hooks import HookContext
+                ctx = HookContext(event_name="startup")
+                asyncio.ensure_future(self.hook_engine.run_hooks("startup", ctx))
             # Kick off MCP connections after agent is ready
             if self._mcp_server_configs:
                 self._mcp_status.set_connecting() if self._mcp_status else None
@@ -271,6 +278,7 @@ class MewCodeApp(App):
             permission_checker=self._permission_checker,
             instructions_content=self._instructions_content,
             memory_manager=self.memory_manager,
+            hook_engine=self.hook_engine,
         )
 
         # Skill system (ch11 T10)
@@ -683,6 +691,11 @@ class MewCodeApp(App):
             self._append_chat_line("\033[33m[ABORT] 已中断当前回复\033[0m")
 
     async def action_quit(self) -> None:
+        # Trigger shutdown hook
+        if self.hook_engine:
+            from mewcode.hooks import HookContext
+            ctx = HookContext(event_name="shutdown")
+            await self.hook_engine.run_hooks("shutdown", ctx)
         if self.session:
             self.session.close()
         await self._shutdown_mcp()
@@ -694,11 +707,22 @@ class MewCodeApp(App):
 # ──────────────────────────────────────────────
 
 async def main() -> None:
+    import sys
     from pathlib import Path
     from mewcode.config import load_config
 
     config_path = Path("config.yaml")
     app_config = load_config(config_path)
+
+    # Load and validate hooks (ch12 T11)
+    hook_engine = None
+    try:
+        from mewcode.hooks import HookEngine, HookConfigError, load_hooks
+        hooks = load_hooks(app_config.raw_hooks)
+        hook_engine = HookEngine(hooks)
+    except HookConfigError as e:
+        print(f"Hook config error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     import yaml
     raw: dict[str, Any] = {"providers": []}
@@ -706,7 +730,7 @@ async def main() -> None:
         with open(config_path) as f:
             raw = yaml.safe_load(f) or raw
 
-    app = MewCodeApp(raw, mcp_servers=app_config.mcp_servers)
+    app = MewCodeApp(raw, mcp_servers=app_config.mcp_servers, hook_engine=hook_engine)
     await app.run_async()
 
 

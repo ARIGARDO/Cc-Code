@@ -94,6 +94,7 @@ class MCPServerConfig:
 class AppConfig:
     providers: list[dict[str, Any]] = field(default_factory=list)
     mcp_servers: list[MCPServerConfig] = field(default_factory=list)
+    raw_hooks: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _parse_mcp_servers(raw: Any) -> list[MCPServerConfig]:
@@ -144,4 +145,5 @@ def load_config(path: Any) -> AppConfig:
     return AppConfig(
         providers=list(raw.get("providers", []) or []),
         mcp_servers=_parse_mcp_servers(raw.get("mcp_servers")),
+        raw_hooks=list(raw.get("hooks", []) or []),
     )

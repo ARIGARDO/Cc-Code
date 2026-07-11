@@ -427,12 +427,20 @@ class Agent:
     def _build_hook_context(self, event: str, **kwargs: Any) -> Any:
         """Build a HookContext for hook execution."""
         from mewcode.hooks import HookContext
-        file_path = self._infer_file_path(kwargs)
+        tool_name = kwargs.get("tool_name", "")
+        tool_args = kwargs.get("tool_args", {})
+        if not tool_args and "tool_name" in kwargs:
+            tool_args = {k: v for k, v in kwargs.items() if k not in ("tool_name", "iteration")}
+        file_path = kwargs.get("file_path", "") or self._infer_file_path(kwargs)
+        message = kwargs.get("message", "")
+        error = kwargs.get("error", "")
         return HookContext(
-            agent_id=self.agent_id,
             event_name=event,
-            file_path=file_path,
-            extra=kwargs,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            file_path=str(file_path) if file_path else "",
+            message=message,
+            error=error,
         )
 
     def _infer_file_path(self, args: dict[str, Any]) -> Optional[str]:
@@ -450,7 +458,7 @@ class Agent:
         """Drain notifications from hook engine and convert to AgentEvents."""
         if not self.hook_engine:
             return []
-        return [HookEvent(hook_name=n.hook_name, message=n.message) for n in self.hook_engine.drain_notifications()]
+        return [HookEvent(hook_name=n.hook_id, message=n.output) for n in self.hook_engine.drain_notifications()]
 
     async def run(
         self,
@@ -505,7 +513,7 @@ class Agent:
         # Trigger session_start hooks
         if self.hook_engine:
             ctx = self._build_hook_context("session_start")
-            self.hook_engine.run_hooks_sync("session_start", ctx)
+            await self.hook_engine.run_hooks("session_start", ctx)
             for hev in self._drain_hook_events():
                 yield hev
 
@@ -517,7 +525,7 @@ class Agent:
 
             if self.hook_engine:
                 ctx = self._build_hook_context("turn_start", iteration=iteration)
-                self.hook_engine.run_hooks_sync("turn_start", ctx)
+                await self.hook_engine.run_hooks("turn_start", ctx)
                 for hev in self._drain_hook_events():
                     yield hev
 
@@ -538,9 +546,13 @@ class Agent:
             # Trigger pre_send hook
             if self.hook_engine:
                 ctx = self._build_hook_context("pre_send", iteration=iteration)
-                self.hook_engine.run_hooks_sync("pre_send", ctx)
+                await self.hook_engine.run_hooks("pre_send", ctx)
                 for hev in self._drain_hook_events():
                     yield hev
+                # Inject prompt messages from hooks into next LLM request
+                prompt_msgs = self.hook_engine.get_prompt_messages()
+                if prompt_msgs:
+                    conversation.add_system_reminder("\n".join(prompt_msgs))
 
             # Step 3: Build system prompt
             from mewcode.prompts import build_system_prompt
@@ -599,7 +611,7 @@ class Agent:
             # Trigger post_receive hook
             if self.hook_engine:
                 ctx = self._build_hook_context("post_receive")
-                self.hook_engine.run_hooks_sync("post_receive", ctx)
+                await self.hook_engine.run_hooks("post_receive", ctx)
                 for hev in self._drain_hook_events():
                     yield hev
 
@@ -636,7 +648,7 @@ class Agent:
             if not response.tool_calls:
                 if self.hook_engine:
                     ctx = self._build_hook_context("session_end")
-                    self.hook_engine.run_hooks_sync("session_end", ctx)
+                    await self.hook_engine.run_hooks("session_end", ctx)
                     for hev in self._drain_hook_events():
                         yield hev
                 yield LoopComplete(stop_reason="end_turn" if not response.stop_reason else response.stop_reason)
@@ -692,7 +704,7 @@ class Agent:
             # Step 14: Trigger turn_end hooks
             if self.hook_engine:
                 ctx = self._build_hook_context("turn_end", iteration=iteration)
-                self.hook_engine.run_hooks_sync("turn_end", ctx)
+                await self.hook_engine.run_hooks("turn_end", ctx)
                 for hev in self._drain_hook_events():
                     yield hev
 
@@ -752,9 +764,9 @@ class Agent:
             # Pre-tool hook (can reject)
             if self.hook_engine:
                 ctx = self._build_hook_context("pre_tool_use", tool_name=tc.name, **tc.arguments)
-                hook_result = self.hook_engine.run_pre_tool_hooks(ctx)
-                if not hook_result.accepted:
-                    content = f"Hook rejected: {hook_result.reason}"
+                rejection = await self.hook_engine.run_pre_tool_hooks(ctx)
+                if rejection is not None:
+                    content = f"Hook rejected: {rejection.reason}"
                     is_error = True
                     tool = None
 
@@ -786,7 +798,7 @@ class Agent:
             # Post-tool hook
             if self.hook_engine:
                 ctx = self._build_hook_context("post_tool_use", tool_name=tc.name, **tc.arguments)
-                self.hook_engine.run_hooks("post_tool_use", ctx)
+                await self.hook_engine.run_hooks("post_tool_use", ctx)
 
         return self._DirectResult(
             tool_use_id=tc.id,
@@ -836,12 +848,12 @@ class Agent:
         # Pre-tool hook
         if self.hook_engine:
             ctx = self._build_hook_context("pre_tool_use", tool_name=tc.name, **tc.arguments)
-            hook_result = self.hook_engine.run_pre_tool_hooks(ctx)
-            if not hook_result.accepted:
+            rejection = await self.hook_engine.run_pre_tool_hooks(ctx)
+            if rejection is not None:
                 yield ToolResultEvent(
                     tool_id=tc.id,
                     tool_name=tool_name,
-                    result=f"Hook rejected: {hook_result.reason}",
+                    result=f"Hook rejected: {rejection.reason}",
                     is_error=True,
                 )
                 return
@@ -922,7 +934,7 @@ class Agent:
         # Post-tool hook
         if self.hook_engine:
             ctx = self._build_hook_context("post_tool_use", tool_name=tc.name, **tc.arguments)
-            self.hook_engine.run_hooks("post_tool_use", ctx)
+            await self.hook_engine.run_hooks("post_tool_use", ctx)
             for hev in self._drain_hook_events():
                 yield hev
 
