@@ -13,6 +13,7 @@ from mewcode.commands.handlers.memory import MEMORY_COMMAND
 from mewcode.commands.handlers.permission import PERMISSION_COMMAND
 from mewcode.commands.handlers.status import STATUS_COMMAND
 from mewcode.commands.handlers.skill import SKILL_COMMAND
+from mewcode.commands.handlers.worktree import WORKTREE_COMMAND
 
 ALL_COMMANDS = [
     HELP_COMMAND,
@@ -25,6 +26,7 @@ ALL_COMMANDS = [
     PERMISSION_COMMAND,
     STATUS_COMMAND,
     SKILL_COMMAND,
+    WORKTREE_COMMAND,
 ]
 
 __all__ = [
@@ -40,6 +42,7 @@ __all__ = [
     "PERMISSION_COMMAND",
     "STATUS_COMMAND",
     "SKILL_COMMAND",
+    "WORKTREE_COMMAND",
 ]
 
 

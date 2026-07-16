@@ -1,6 +1,5 @@
 """Allow running via ``python -m mewcode``."""
 import asyncio
-import sys
 
 from mewcode.app import main
 

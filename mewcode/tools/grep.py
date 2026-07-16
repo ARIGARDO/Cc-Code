@@ -9,6 +9,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mewcode.tools.base import SKIP_DIRS, Tool, ToolResult
+from mewcode.tools.ctx import resolve_path
 
 
 class Params(BaseModel):
@@ -36,7 +37,7 @@ class Grep(Tool):
         except re.error as e:
             return ToolResult(f"Error: invalid regex pattern: {e}", is_error=True)
 
-        base = Path(params.path).expanduser().resolve()
+        base = Path(resolve_path(params.path)).expanduser()
         if not base.is_dir():
             return ToolResult(f"Error: not a directory: {base}", is_error=True)
 

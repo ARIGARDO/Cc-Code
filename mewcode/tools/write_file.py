@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mewcode.tools.base import Tool, ToolResult
+from mewcode.tools.ctx import resolve_path
 
 
 class Params(BaseModel):
@@ -26,7 +27,7 @@ class WriteFile(Tool):
         self._cache = file_cache
 
     async def execute(self, params: Any) -> ToolResult:
-        path = Path(params.file_path).expanduser().resolve()
+        path = Path(resolve_path(params.file_path)).expanduser()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(params.content, encoding="utf-8")

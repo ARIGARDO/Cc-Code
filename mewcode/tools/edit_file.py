@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mewcode.tools.base import Tool, ToolResult
+from mewcode.tools.ctx import resolve_path
 
 
 class Params(BaseModel):
@@ -30,7 +31,7 @@ class EditFile(Tool):
         self._cache = file_cache
 
     async def execute(self, params: Any) -> ToolResult:
-        path = Path(params.file_path).expanduser().resolve()
+        path = Path(resolve_path(params.file_path)).expanduser()
         if not path.exists():
             return ToolResult(f"Error: file not found: {path}", is_error=True)
         if not path.is_file():

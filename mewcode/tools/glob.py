@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mewcode.tools.base import SKIP_DIRS, Tool, ToolResult
+from mewcode.tools.ctx import resolve_path
 
 
 class Params(BaseModel):
@@ -26,7 +27,7 @@ class Glob(Tool):
     is_concurrency_safe = True
 
     async def execute(self, params: Any) -> ToolResult:
-        base = Path(params.path).expanduser().resolve()
+        base = Path(resolve_path(params.path)).expanduser()
         if not base.is_dir():
             return ToolResult(f"Error: not a directory: {base}", is_error=True)
 

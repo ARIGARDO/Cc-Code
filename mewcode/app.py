@@ -150,6 +150,10 @@ class MewCodeApp(App):
         self._streaming_worker: Optional[Any] = None
         self._history_len_before: int = 0
 
+        # Worktree isolation (ch14)
+        self.worktree_manager: Any = None
+        self.active_cwd: str = ""
+
         # Command system (ch10)
         self.command_registry = CommandRegistry()
         register_all_commands(self.command_registry)
@@ -305,6 +309,55 @@ class MewCodeApp(App):
         from mewcode.commands.handlers.skill_register import register_skill_commands
         register_skill_commands(self.command_registry, self.skill_loader, self.skill_executor)
 
+        # SubAgent system (ch13 T14)
+        from mewcode.agents.loader import AgentLoader
+        from mewcode.agents.task_manager import TaskManager
+        from mewcode.agents.trace import TraceManager
+        from mewcode.tools.agent_tool import AgentTool
+
+        self.agent_loader = AgentLoader(work_dir=work_dir)
+        self.agent_loader.load_all()
+        self.task_manager = TaskManager()
+        self.trace_manager = TraceManager()
+
+        # Worktree isolation (ch14 T14)
+        import sys
+        from datetime import datetime, timedelta, timezone
+        worktree_manager = None
+        try:
+            from mewcode.worktree import Manager as WorktreeManager
+            worktree_manager = WorktreeManager(str(work_dir))
+        except Exception as e:
+            print(f"Worktree 管理器降级: {e}", file=sys.stderr)
+            worktree_manager = None
+        else:
+            asyncio.create_task(worktree_manager.sweep_stale(
+                datetime.now(timezone.utc) - timedelta(hours=24)
+            ))
+        self.worktree_manager = worktree_manager
+
+        agent_tool = AgentTool(
+            agent_loader=self.agent_loader,
+            task_manager=self.task_manager,
+            trace_manager=self.trace_manager,
+            parent_agent=self.agent,
+            enable_fork=True,
+            provider_config=self._provider,
+            worktree_manager=worktree_manager,
+        )
+        self.registry.register(agent_tool)
+
+        agent_catalog = self.agent_loader.list_agents()
+        if agent_catalog:
+            catalog_lines = ["You can use the following SubAgents:\n"]
+            for atype, adesc in agent_catalog:
+                catalog_lines.append(f"- {atype}: {adesc}")
+            catalog_lines.append("\nUse the Agent tool to spawn a sub-agent.")
+            self.agent.set_agent_catalog("\n".join(catalog_lines))
+
+        # Register tasks/trace slash commands (ch13 T14)
+        self._register_subagent_commands()
+
         # Update header with model info
         if self._header and self._provider:
             self._header.version = "v0.1.0"
@@ -337,6 +390,55 @@ class MewCodeApp(App):
 
         self._mcp_ready = True
 
+    def _register_subagent_commands(self) -> None:
+        """Register /tasks and /trace slash commands."""
+        tm = self.task_manager
+        trm = self.trace_manager
+
+        async def handle_tasks(ctx: CommandContext) -> None:
+            tasks = tm.list_tasks()
+            if not tasks:
+                ctx.ui.add_system_message("No background tasks.")
+                return
+            lines = []
+            for t in tasks:
+                lines.append(f"  {t.task_id}  {t.agent_type}  {t.status}")
+            ctx.ui.add_system_message("Background tasks:\n" + "\n".join(lines))
+
+        async def handle_trace(ctx: CommandContext) -> None:
+            args = ctx.args.strip()
+            if not args:
+                ctx.ui.add_system_message("Usage: /trace <trace_id>")
+                return
+            nodes = trm.get_tree(args)
+            if not nodes:
+                ctx.ui.add_system_message(f"No trace found for '{args}'")
+                return
+            lines = []
+            for n in nodes:
+                lines.append(f"  {n.agent_id}  {n.agent_type}  {n.status}")
+            ctx.ui.add_system_message(f"Trace {args}:\n" + "\n".join(lines))
+
+        from mewcode.commands.registry import Command
+        self.command_registry.register_sync(Command(name="tasks", handler=handle_tasks, description="List background sub-agent tasks"))
+        self.command_registry.register_sync(Command(name="trace", handler=handle_trace, description="Show trace tree for a sub-agent"))
+
+    def _check_completed_tasks(self) -> None:
+        """Poll completed background tasks and inject notifications."""
+        if not hasattr(self, "task_manager"):
+            return
+        completed_ids = self.task_manager.poll_completed()
+        if not completed_ids:
+            return
+        from mewcode.agents.notification import inject_task_notifications
+        completed_tasks = []
+        for tid in completed_ids:
+            bt = self.task_manager.get(tid)
+            if bt:
+                completed_tasks.append(bt)
+        if completed_tasks:
+            inject_task_notifications(self.conversation, completed_tasks)
+
     async def _shutdown_mcp(self) -> None:
         if self._mcp_manager is not None:
             try:
@@ -365,6 +467,8 @@ class MewCodeApp(App):
                 "work_dir": str(self._work_dir),
                 "skill_loader": getattr(self, "skill_loader", None),
                 "skill_executor": getattr(self, "skill_executor", None),
+                "worktree_manager": getattr(self, "worktree_manager", None),
+                "set_active_cwd": self._set_active_cwd,
             },
         )
 
@@ -390,6 +494,14 @@ class MewCodeApp(App):
                 pass
 
         return _UI()
+
+    def _set_active_cwd(self, cwd: str) -> None:
+        self.active_cwd = cwd
+
+    def _effective_cwd(self) -> str:
+        if self.active_cwd:
+            return self.active_cwd
+        return str(self._work_dir)
 
     def _set_session(self, session: Any) -> None:
         self.session = session
@@ -500,12 +612,15 @@ class MewCodeApp(App):
         self._history_len_before = len(self.conversation.history)
 
         try:
-            async for event in self.agent.run(self.conversation):
-                if isinstance(event, PermissionRequest):
-                    result = await self._ask_permission(event)
-                    event.future.set_result(result)
-                else:
-                    self._render_event(event)
+            from mewcode.tools.ctx import with_cwd
+            cwd = self._effective_cwd()
+            with with_cwd(cwd):
+                async for event in self.agent.run(self.conversation):
+                    if isinstance(event, PermissionRequest):
+                        result = await self._ask_permission(event)
+                        event.future.set_result(result)
+                    else:
+                        self._render_event(event)
         except LLMError as e:
             self._show_error(str(e))
         except Exception as e:
@@ -513,6 +628,7 @@ class MewCodeApp(App):
             logger.exception("process_message failed")
         finally:
             self._streaming_worker = None
+            self._check_completed_tasks()
 
     def _render_event(self, event: Any) -> None:
         if isinstance(event, StreamText):
@@ -683,6 +799,15 @@ class MewCodeApp(App):
 
     def action_abort(self) -> None:
         if self._streaming_worker is not None:
+            # Adopt running agent as background task (ch13 T14)
+            if hasattr(self, "task_manager") and self.agent:
+                try:
+                    self.task_manager.adopt_running(
+                        self.agent,
+                        agent_type=getattr(self.agent, "agent_id", "main"),
+                    )
+                except Exception:
+                    pass
             try:
                 self._streaming_worker.cancel()
             except Exception:

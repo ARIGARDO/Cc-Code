@@ -386,6 +386,7 @@ class Agent:
         self._plan_path_cache: Optional[Path] = None
         self.active_skills: dict[str, str] = {}
         self._skill_catalog: str = ""
+        self._agent_catalog: str = ""
         self._loop_count: int = 0
         self._extracting: bool = False
 
@@ -402,6 +403,9 @@ class Agent:
 
     def set_skill_catalog(self, catalog: str) -> None:
         self._skill_catalog = catalog
+
+    def set_agent_catalog(self, catalog: str) -> None:
+        self._agent_catalog = catalog
 
     def _ensure_session_dir(self, work_dir: Path) -> Path:
         return ensure_session_dir(work_dir)
@@ -492,6 +496,7 @@ class Agent:
             work_dir=str(self.work_dir),
             active_skills=self.active_skills if self.active_skills else None,
             skill_catalog=self._skill_catalog if self._skill_catalog else None,
+            agent_catalog=self._agent_catalog if self._agent_catalog else None,
         )
         conversation.inject_environment(env_ctx)
         memory_content = ""

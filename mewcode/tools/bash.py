@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mewcode.tools.base import Tool, ToolResult
+from mewcode.tools.ctx import resolve_path
 
 MAX_TIMEOUT = 600
 
@@ -36,6 +37,7 @@ class Bash(Tool):
                 params.command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=resolve_path(""),
             )
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(), timeout=effective_timeout
