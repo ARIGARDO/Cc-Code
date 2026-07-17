@@ -300,7 +300,7 @@ class TestStatusHandler:
         mock_agent.registry.list_tools.return_value = ["tool1", "tool2"]
         ctx = _make_ctx(ui=ui, agent=mock_agent, config={"work_dir": "/tmp"})
         await handle_status(ctx)
-        assert any("MewCode 状态" in m for m in ui.messages)
+        assert any("CcCode 状态" in m for m in ui.messages)
 
 
 # ── TestSessionHandler ──────────────────────

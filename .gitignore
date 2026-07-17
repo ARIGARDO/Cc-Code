@@ -21,7 +21,7 @@ env/
 htmlcov/
 coverage.xml
 
-# MewCode runtime data
+# CcCode runtime data
 .mewcode/
 
 # Config with secrets

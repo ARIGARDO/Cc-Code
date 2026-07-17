@@ -10,7 +10,7 @@ async def handle_status(ctx: CommandContext) -> None:
     session = ctx.session
     memory_manager = ctx.memory_manager
 
-    lines = ["\033[1mMewCode 状态\033[0m"]
+    lines = ["\033[1mCcCode 状态\033[0m"]
 
     if agent:
         from mewcode.permissions.modes import PermissionMode
@@ -55,7 +55,7 @@ async def handle_status(ctx: CommandContext) -> None:
 
 STATUS_COMMAND = Command(
     name="status",
-    description="显示 MewCode 状态信息",
+    description="显示 CcCode 状态信息",
     type=CommandType.LOCAL,
     handler=handle_status,
     aliases=["s"],

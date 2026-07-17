@@ -931,7 +931,7 @@ class TestSystemPrompt:
     def test_build_system_prompt_normal(self) -> None:
         from mewcode.prompts import build_system_prompt
         prompt = build_system_prompt(work_dir="/home/user/project")
-        assert "MewCode" in prompt
+        assert "CcCode" in prompt
         assert "plan mode" not in prompt.lower()
 
     def test_build_system_prompt_with_custom_instructions(self) -> None:

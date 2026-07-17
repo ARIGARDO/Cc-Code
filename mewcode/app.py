@@ -1,4 +1,4 @@
-"""MewCode TUI application.
+"""CcCode TUI application.
 
 Wires together provider selection, LLM client, Agent, ToolRegistry, and the Textual UI.
 Layout matches the reference design:
@@ -47,7 +47,7 @@ from mewcode.permissions.checker import PermissionChecker
 from mewcode.permissions.dangerous import DangerousCommandDetector
 from mewcode.permissions.rules import RuleEngine
 from mewcode.permissions.sandbox import PathSandbox
-from mewcode.tui import ChatOutput, MCPStatus, MewCodeHeader, TUILayout
+from mewcode.tui import ChatOutput, MCPStatus, CcCodeHeader, TUILayout
 from mewcode.tools import ToolRegistry, create_default_registry
 from mewcode.memory import (
     MemoryManager,
@@ -72,11 +72,11 @@ _MODE_CYCLE = [
 ]
 
 
-class MewCodeApp(App):
-    """Textual-based TUI for MewCode.
+class CcCodeApp(App):
+    """Textual-based TUI for CcCode.
 
     CSS_CLASS = "mewcode"
-    TITLE = "MewCode"
+    TITLE = "CcCode"
     SUB_TITLE = "AI Coding Assistant"
     """
 
@@ -159,7 +159,7 @@ class MewCodeApp(App):
         register_all_commands(self.command_registry)
 
         # UI widget references (set in on_mount)
-        self._header: Optional[MewCodeHeader] = None
+        self._header: Optional[CcCodeHeader] = None
         self._mcp_status: Optional[MCPStatus] = None
         self._chat_output: Optional[ChatOutput] = None
         self._input_widget: Optional[Input] = None
@@ -173,7 +173,7 @@ class MewCodeApp(App):
         yield Static(self._mode_label(), id="mode_bar")
 
     def on_mount(self) -> None:
-        self._header = self.query_one(MewCodeHeader)
+        self._header = self.query_one(CcCodeHeader)
         self._mcp_status = self.query_one(MCPStatus)
         self._chat_output = self.query_one(ChatOutput)
         self._mode_bar = self.query_one("#mode_bar", Static)
@@ -892,7 +892,7 @@ async def main() -> None:
         with open(config_path) as f:
             raw = yaml.safe_load(f) or raw
 
-    app = MewCodeApp(raw, mcp_servers=app_config.mcp_servers, hook_engine=hook_engine)
+    app = CcCodeApp(raw, mcp_servers=app_config.mcp_servers, hook_engine=hook_engine)
     await app.run_async()
 
 

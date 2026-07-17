@@ -1,4 +1,4 @@
-"""Adapt MCP tools to MewCode's :class:`Tool` ABC."""
+"""Adapt MCP tools to CcCode's :class:`Tool` ABC."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def _extract_text(content: list[Any]) -> str:
 # ──────────────────────────────────────────────
 
 class MCPToolWrapper(Tool):
-    """Adapt a single MCP tool to MewCode's :class:`Tool` interface."""
+    """Adapt a single MCP tool to CcCode's :class:`Tool` interface."""
 
     def __init__(
         self,

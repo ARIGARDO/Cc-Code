@@ -1,4 +1,4 @@
-"""Command handlers for MewCode: register_all_commands aggregates all built-in commands."""
+"""Command handlers for CcCode: register_all_commands aggregates all built-in commands."""
 
 from __future__ import annotations
 

@@ -1,1 +1,1 @@
-"""Skill system for MewCode."""
+"""Skill system for CcCode."""

@@ -1,4 +1,4 @@
-"""Textual TUI widgets for MewCode.
+"""Textual TUI widgets for CcCode.
 
 Provides the visual layout matching the reference design:
   - Header: ASCII cat logo + version + model + workdir
@@ -18,11 +18,11 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 
-class MewCodeHeader(Static):
+class CcCodeHeader(Static):
     """Top header showing ASCII cat logo, version, model, and workdir."""
 
     DEFAULT_CSS = """
-    MewCodeHeader {
+    CcCodeHeader {
         height: auto;
         padding: 0 1;
         background: $surface;
@@ -55,7 +55,7 @@ class MewCodeHeader(Static):
             " > ^ <",
         ]
         col2 = [
-            f"MewCode {self.version}",
+            f"CcCode {self.version}",
             self.model_name,
             self.work_dir,
         ]
@@ -240,6 +240,6 @@ class TUILayout(Container):
     """
 
     def compose(self) -> ComposeResult:
-        yield MewCodeHeader(id="header")
+        yield CcCodeHeader(id="header")
         yield MCPStatus(id="mcp_status")
         yield ChatOutput(id="chat_output")

@@ -1,1 +1,1 @@
-"""Built-in skills for MewCode."""
+"""Built-in skills for CcCode."""

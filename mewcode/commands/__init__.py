@@ -1,4 +1,4 @@
-"""Command system for MewCode."""
+"""Command system for CcCode."""
 
 from mewcode.commands.registry import Command, CommandContext, CommandRegistry, CommandType
 from mewcode.commands.parser import parse_command, complete

@@ -1,5 +1,5 @@
 cat >MEWCODE.md <'EOF'
-# MewCode 项目
+# CcCode 项目
 # 技术栈
 Python
 
