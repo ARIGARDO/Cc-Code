@@ -336,6 +336,41 @@ class MewCodeApp(App):
             ))
         self.worktree_manager = worktree_manager
 
+        # ch15 Team system — TeamManager + AgentNameRegistry + team tools
+        from mewcode.team import TeamManager, AgentNameRegistry, build_team_tools
+        from mewcode.coordinator import is_enabled as coordinator_is_enabled
+        from mewcode.coordinator import system_prompt_suffix as coordinator_suffix
+        from mewcode.coordinator import filter_tool_names as coordinator_filter
+
+        self.team_manager = TeamManager(str(work_dir))
+        self.agent_name_registry = AgentNameRegistry()
+
+        for team_tool in build_team_tools(
+            self.team_manager,
+            registry=self.agent_name_registry,
+            current_member="lead",
+        ):
+            self.registry.register(team_tool)
+
+        # ch15 Coordinator mode — restrict tool set if enabled
+        if coordinator_is_enabled():
+            self.agent.coordinator_mode = True
+            for tool_name in self.registry.list_tools():
+                should_keep = tool_name in coordinator_filter([tool_name])
+                if not should_keep:
+                    self.registry.disable(tool_name)
+            # Append coordinator-specific reminder to agent system prompt
+            existing = getattr(self.agent, "_coordinator_hint", "")
+            if not existing:
+                try:
+                    self.agent.instructions_content = (
+                        str(self.agent.instructions_content or "")
+                        + "\n\n"
+                        + coordinator_suffix()
+                    )
+                except Exception:
+                    pass
+
         agent_tool = AgentTool(
             agent_loader=self.agent_loader,
             task_manager=self.task_manager,
@@ -344,6 +379,7 @@ class MewCodeApp(App):
             enable_fork=True,
             provider_config=self._provider,
             worktree_manager=worktree_manager,
+            team_manager=self.team_manager,
         )
         self.registry.register(agent_tool)
 
@@ -468,6 +504,7 @@ class MewCodeApp(App):
                 "skill_loader": getattr(self, "skill_loader", None),
                 "skill_executor": getattr(self, "skill_executor", None),
                 "worktree_manager": getattr(self, "worktree_manager", None),
+                "team_manager": getattr(self, "team_manager", None),
                 "set_active_cwd": self._set_active_cwd,
             },
         )
