@@ -39,3 +39,18 @@ coverage.xml
 
 # Logs
 *.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python version
+.python-version
+
+# Backup files
+*.bak
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
