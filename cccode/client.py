@@ -315,16 +315,17 @@ class OpenAIClient(LLMClient):
                         if existing is not None and existing.get("tool_name", "") == "":
                             # Delta arrived first — update name and flush buffered deltas
                             existing["tool_name"] = item.name
+                            existing["call_id"] = getattr(item, "call_id", None) or item.id
                             if not existing["started"]:
                                 existing["started"] = True
                                 yield ToolCallStart(
-                                    tool_id=item.id, tool_name=item.name
+                                    tool_id=existing["call_id"], tool_name=item.name
                                 )
                             for d in existing.pop("buffered_deltas", []):
-                                yield d
+                                yield ToolCallDelta(tool_id=existing["call_id"], delta=d.delta)
                         else:
                             active_tools[item.id] = {
-                                "call_id": item.id,
+                                "call_id": getattr(item, "call_id", None) or item.id,
                                 "tool_name": item.name,
                                 "json_accum": "",
                                 "started": False,
@@ -343,14 +344,14 @@ class OpenAIClient(LLMClient):
                         }
                         active_tools[call_id] = entry
 
-                    delta_event = ToolCallDelta(tool_id=call_id, delta=event.delta)
+                    delta_event = ToolCallDelta(tool_id=entry["call_id"], delta=event.delta)
 
                     if entry["tool_name"]:
                         # Name is known — yield immediately
                         if not entry["started"]:
                             entry["started"] = True
                             yield ToolCallStart(
-                                tool_id=call_id, tool_name=entry["tool_name"]
+                                tool_id=entry["call_id"], tool_name=entry["tool_name"]
                             )
                         yield delta_event
                     else:
@@ -368,7 +369,7 @@ class OpenAIClient(LLMClient):
                     if not entry["started"]:
                         entry["started"] = True
                         yield ToolCallStart(
-                            tool_id=call_id,
+                            tool_id=entry["call_id"],
                             tool_name=entry["tool_name"] or "calling",
                         )
                     for d in entry.pop("buffered_deltas", []):
@@ -378,7 +379,7 @@ class OpenAIClient(LLMClient):
                     except json.JSONDecodeError:
                         args = {}
                     yield ToolCallComplete(
-                        tool_id=call_id,
+                        tool_id=entry["call_id"],
                         tool_name=entry["tool_name"] or "calling",
                         arguments=args,
                     )

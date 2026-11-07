@@ -393,10 +393,11 @@ class TestTaskStore:
 
     def test_dependency_blocked_by(self, tmp_dir: str):
         store = TaskStore(tmp_dir)
-        prerequisite = asyncio.run(store.create("Prerequisite", status="pending"))
+        prerequisite = asyncio.run(store.create("Prerequisite"))
         dependent = asyncio.run(store.create("Dep", blocked_by=[prerequisite]))
         tasks = asyncio.run(store.list_())
         ids_to_tasks = {t.id: t for t in tasks}
+        assert ids_to_tasks[prerequisite].status == "pending"
         # Dependent has blocked_by
         assert prerequisite in ids_to_tasks[dependent].blocked_by
         # Prerequisite has reverse blocks reference

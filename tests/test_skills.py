@@ -369,7 +369,7 @@ class TestDirectory:
             tool = reg.get("adder")
             assert tool is not None
             import asyncio
-            result = asyncio.get_event_loop().run_until_complete(
+            result = asyncio.run(
                 tool.execute(_DynamicParams(a=5))
             )
             assert result.output == "6"
@@ -390,7 +390,7 @@ class TestLoadSkill:
         import asyncio
         params = MagicMock()
         params.name = "commit"
-        result = asyncio.get_event_loop().run_until_complete(tool.execute(params))
+        result = asyncio.run(tool.execute(params))
         assert "activated" in result.output
         assert not result.is_error
 
@@ -406,7 +406,7 @@ class TestLoadSkill:
         import asyncio
         params = MagicMock()
         params.name = "nonexistent"
-        result = asyncio.get_event_loop().run_until_complete(tool.execute(params))
+        result = asyncio.run(tool.execute(params))
         assert result.is_error
 
     def test_not_initialized(self):
@@ -415,7 +415,7 @@ class TestLoadSkill:
         import asyncio
         params = MagicMock()
         params.name = "commit"
-        result = asyncio.get_event_loop().run_until_complete(tool.execute(params))
+        result = asyncio.run(tool.execute(params))
         assert result.is_error
 
     def test_is_system_tool_and_category(self):

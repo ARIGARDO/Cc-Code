@@ -255,6 +255,9 @@ class StreamCollector:
                 pass
 
             elif isinstance(event, ToolCallComplete):
+                if any(call.id == event.tool_id for call in self.tool_calls):
+                    logger.warning("Ignoring duplicate tool call ID: %s", event.tool_id)
+                    continue
                 self.tool_calls.append(
                     ToolUseBlock(
                         id=event.tool_id,
@@ -597,124 +600,147 @@ class Agent:
             # Step 7: Stream LLM response
             collector = StreamCollector()
             stream = self.client.stream(api_conv, system=system_prompt, tools=schemas)
-            async for ev in collector.consume(stream):
-                yield ev
+            early_tasks: dict[str, tuple[asyncio.Task[None], asyncio.Queue[Any]]] = {}
+            stream_barrier = False
 
-            # Step 7: Collect response and accumulate usage
-            response = collector.response()
-            total_input += response.input_tokens
-            total_output += response.output_tokens
-            self.total_input_tokens += response.input_tokens
-            self.total_output_tokens += response.output_tokens
-            yield UsageEvent(
-                input_tokens=response.input_tokens,
-                output_tokens=response.output_tokens,
-                total_input=total_input,
-                total_output=total_output,
-            )
+            async def execute_early(call: ToolUseBlock, queue: asyncio.Queue[Any]) -> None:
+                try:
+                    async for item in self._execute_tool(call):
+                        await queue.put(item)
+                finally:
+                    await queue.put(None)
 
-            # Trigger post_receive hook
-            if self.hook_engine:
-                ctx = self._build_hook_context("post_receive")
-                await self.hook_engine.run_hooks("post_receive", ctx)
-                for hev in self._drain_hook_events():
-                    yield hev
+            try:
+                async for ev in collector.consume(stream):
+                    if isinstance(ev, ToolUseEvent):
+                        tool = self.registry.get(ev.tool_name)
+                        no_hooks = self.hook_engine is None or getattr(self.hook_engine, "hooks", None) == []
+                        eligible = bool(no_hooks and tool and self.registry.is_enabled(ev.tool_name)
+                                        and tool.is_concurrency_safe and tool.category == "read")
+                        if eligible and self.permission_checker:
+                            eligible = self.permission_checker.check(tool, ev.arguments).effect == "allow"
+                        if not eligible:
+                            stream_barrier = True
+                        elif not stream_barrier and ev.tool_id not in early_tasks:
+                            queue: asyncio.Queue[Any] = asyncio.Queue()
+                            call = ToolUseBlock(ev.tool_id, ev.tool_name, ev.arguments)
+                            early_tasks[ev.tool_id] = (asyncio.create_task(execute_early(call, queue)), queue)
+                    yield ev
 
-            # Step 8: Handle max_tokens stop reason → escalate
-            if response.stop_reason == "max_tokens" and token_recoveries_used < MAX_OUTPUT_TOKENS_RECOVERIES:
-                if hasattr(self.client, "set_max_output_tokens"):
-                    self.client.set_max_output_tokens(MAX_TOKENS_CEILING)
-                token_recoveries_used += 1
-                yield RetryEvent(reason="max_tokens escalation")
-                # Add the already generated text as assistant message and loop again
+                # Step 7: Collect response and accumulate usage
+                response = collector.response()
+                total_input += response.input_tokens
+                total_output += response.output_tokens
+                self.total_input_tokens += response.input_tokens
+                self.total_output_tokens += response.output_tokens
+                yield UsageEvent(
+                    input_tokens=response.input_tokens,
+                    output_tokens=response.output_tokens,
+                    total_input=total_input,
+                    total_output=total_output,
+                )
+
+                # Trigger post_receive hook
+                if self.hook_engine:
+                    ctx = self._build_hook_context("post_receive")
+                    await self.hook_engine.run_hooks("post_receive", ctx)
+                    for hev in self._drain_hook_events():
+                        yield hev
+
+                # Step 8: Handle max_tokens stop reason → escalate
+                if response.stop_reason == "max_tokens" and not response.tool_calls and token_recoveries_used < MAX_OUTPUT_TOKENS_RECOVERIES:
+                    if hasattr(self.client, "set_max_output_tokens"):
+                        self.client.set_max_output_tokens(MAX_TOKENS_CEILING)
+                    token_recoveries_used += 1
+                    yield RetryEvent(reason="max_tokens escalation")
+                    # Add the already generated text as assistant message and loop again
+                    conversation.add_assistant_message(
+                        content=response.text,
+                        tool_uses=response.tool_calls if response.tool_calls else None,
+                        thinking_blocks=response.thinking_blocks if response.thinking_blocks else None,
+                    )
+                    conversation.add_system_reminder(
+                        "Previous output hit max_tokens limit; continuing generation..."
+                    )
+                    continue
+
+                # Step 9: Add assistant message to history
                 conversation.add_assistant_message(
                     content=response.text,
                     tool_uses=response.tool_calls if response.tool_calls else None,
                     thinking_blocks=response.thinking_blocks if response.thinking_blocks else None,
                 )
-                conversation.add_system_reminder(
-                    "Previous output hit max_tokens limit; continuing generation..."
-                )
-                continue
 
-            # Step 9: Add assistant message to history
-            conversation.add_assistant_message(
-                content=response.text,
-                tool_uses=response.tool_calls if response.tool_calls else None,
-                thinking_blocks=response.thinking_blocks if response.thinking_blocks else None,
-            )
+                # Trigger memory extraction on interval (every N turns)
+                self._loop_count += 1
+                if self._loop_count % MEMORY_EXTRACTION_INTERVAL == 0 and self.memory_manager and not self._extracting:
+                    asyncio.ensure_future(self._extract_memories(conversation))
 
-            # Trigger memory extraction on interval (every N turns)
-            self._loop_count += 1
-            if self._loop_count % MEMORY_EXTRACTION_INTERVAL == 0 and self.memory_manager and not self._extracting:
-                asyncio.ensure_future(self._extract_memories(conversation))
+                # Step 10: Check for termination
+                if not response.tool_calls:
+                    if self.hook_engine:
+                        ctx = self._build_hook_context("session_end")
+                        await self.hook_engine.run_hooks("session_end", ctx)
+                        for hev in self._drain_hook_events():
+                            yield hev
+                    yield LoopComplete(stop_reason="end_turn" if not response.stop_reason else response.stop_reason)
+                    break
 
-            # Step 10: Check for termination
-            if not response.tool_calls:
+                # Step 11: Check consecutive unknown tools
+                unknown_in_turn = sum(1 for tc in response.tool_calls if self.registry.get(tc.name) is None)
+                if unknown_in_turn == len(response.tool_calls):
+                    consecutive_unknown += 1
+                    if consecutive_unknown >= 3:
+                        yield ErrorEvent("Three consecutive turns with only unknown tools — stopping")
+                        break
+                else:
+                    consecutive_unknown = 0
+
+                # Every call passes through the same permission and hook path exactly once.
+                results: list[ToolResultBlock] = []
+                seen_tool_ids: set[str] = set()
+                for tc in response.tool_calls:
+                    if tc.id in seen_tool_ids:
+                        continue
+                    seen_tool_ids.add(tc.id)
+                    async def events_for_call():
+                        if tc.id not in early_tasks:
+                            async for item in self._execute_tool(tc):
+                                yield item
+                        else:
+                            task, queue = early_tasks[tc.id]
+                            while True:
+                                item = await queue.get()
+                                if item is None:
+                                    break
+                                yield item
+                            await task
+
+                    async for ev in events_for_call():
+                        if isinstance(ev, ToolResultEvent):
+                            results.append(ToolResultBlock(
+                                tool_use_id=ev.tool_id, content=ev.result, is_error=ev.is_error,
+                            ))
+                        yield ev
+
+                # Step 13: Add tool results to conversation
+                conversation.add_tool_results_message(results)
+
+                # Step 14: Trigger turn_end hooks
                 if self.hook_engine:
-                    ctx = self._build_hook_context("session_end")
-                    await self.hook_engine.run_hooks("session_end", ctx)
+                    ctx = self._build_hook_context("turn_end", iteration=iteration)
+                    await self.hook_engine.run_hooks("turn_end", ctx)
                     for hev in self._drain_hook_events():
                         yield hev
-                yield LoopComplete(stop_reason="end_turn" if not response.stop_reason else response.stop_reason)
-                break
 
-            # Step 11: Check consecutive unknown tools
-            unknown_in_turn = sum(1 for tc in response.tool_calls if self.registry.get(tc.name) is None)
-            if unknown_in_turn == len(response.tool_calls):
-                consecutive_unknown += 1
-                if consecutive_unknown >= 3:
-                    yield ErrorEvent("Three consecutive turns with only unknown tools — stopping")
-                    break
-            else:
-                consecutive_unknown = 0
-
-            # Step 12: Partition tool calls into batches and execute
-            batches = partition_tool_calls(response.tool_calls, self.registry)
-            results: list[ToolResultBlock] = []
-
-            for batch in batches:
-                if batch.concurrent:
-                    batch_results = await self._execute_batch_parallel(batch.calls)
-                else:
-                    batch_results = []
-                    for tc in batch.calls:
-                        async for ev in self._execute_tool(tc):
-                            yield ev
-                        # _execute_tool yields events and leaves last result in closure
-                        # We need to collect it
-                        # For simplicity, re-execute in direct mode (this is sequential batch anyway)
-                        result = await self._execute_single_tool_direct(tc)
-                        batch_results.append(result)
-
-                for result in batch_results:
-                    processed = self._maybe_persist_or_truncate(result.content)
-                    results.append(
-                        ToolResultBlock(
-                            tool_use_id=result.tool_use_id,
-                            content=processed,
-                            is_error=result.is_error,
-                        )
-                    )
-                    yield ToolResultEvent(
-                        tool_id=result.tool_use_id,
-                        tool_name=result.tool_name,
-                        result=processed,
-                        is_error=result.is_error,
-                    )
-
-            # Step 13: Add tool results to conversation
-            conversation.add_tool_results_message(results)
-
-            # Step 14: Trigger turn_end hooks
-            if self.hook_engine:
-                ctx = self._build_hook_context("turn_end", iteration=iteration)
-                await self.hook_engine.run_hooks("turn_end", ctx)
-                for hev in self._drain_hook_events():
-                    yield hev
-
-            # End of turn
-            yield TurnComplete()
+                # End of turn
+                yield TurnComplete()
+            finally:
+                for task, _ in early_tasks.values():
+                    if not task.done():
+                        task.cancel()
+                if early_tasks:
+                    await asyncio.gather(*(task for task, _ in early_tasks.values()), return_exceptions=True)
 
         # End of loop
 
@@ -744,81 +770,6 @@ class Agent:
         if changed2:
             return "Context compressed to fit within window; see sidebar for details."
         return None
-
-    @dataclass
-    class _DirectResult:
-        tool_use_id: str
-        tool_name: str
-        content: str
-        is_error: bool
-
-    async def _execute_single_tool_direct(self, tc: ToolUseBlock) -> _DirectResult:
-        """Execute a single tool directly without yielding events (for parallel batches)."""
-        result = None
-        is_error = False
-        content = ""
-
-        tool = self.registry.get(tc.name)
-        if tool is None:
-            content = f"Error: unknown tool \"{tc.name}\""
-            is_error = True
-        elif not self.registry.is_enabled(tc.name):
-            content = f"Error: tool \"{tc.name}\" is disabled"
-            is_error = True
-        else:
-            # Pre-tool hook (can reject)
-            if self.hook_engine:
-                ctx = self._build_hook_context("pre_tool_use", tool_name=tc.name, **tc.arguments)
-                rejection = await self.hook_engine.run_pre_tool_hooks(ctx)
-                if rejection is not None:
-                    content = f"Hook rejected: {rejection.reason}"
-                    is_error = True
-                    tool = None
-
-            if tool and not is_error:
-                try:
-                    params = tool.params_model.model_validate(tc.arguments)
-                except Exception as e:
-                    if tc.name.startswith("mcp_"):
-                        params = tc.arguments
-                        logger.debug(
-                            "MCP tool %s param validation failed (%s), passing raw args",
-                            tc.name, e,
-                        )
-                    else:
-                        content = f"Parameter validation error for {tc.name}: {e}"
-                        is_error = True
-                        tool = None
-
-            if tool and not is_error:
-                try:
-                    result = await tool.execute(params)
-                    content = result.output
-                    is_error = result.is_error
-                    self._snapshot_for_recovery(tc, result)
-                except Exception as e:
-                    content = f"Tool execution error ({tc.name}): {e}"
-                    is_error = True
-
-            # Post-tool hook
-            if self.hook_engine:
-                ctx = self._build_hook_context("post_tool_use", tool_name=tc.name, **tc.arguments)
-                await self.hook_engine.run_hooks("post_tool_use", ctx)
-
-        return self._DirectResult(
-            tool_use_id=tc.id,
-            tool_name=tc.name,
-            content=content,
-            is_error=is_error,
-        )
-
-    async def _execute_batch_parallel(
-        self,
-        calls: list[ToolUseBlock],
-    ) -> list[_DirectResult]:
-        """Execute a batch of concurrent-safe tools in parallel."""
-        tasks = [self._execute_single_tool_direct(tc) for tc in calls]
-        return await asyncio.gather(*tasks, return_exceptions=False)
 
     async def _execute_tool(
         self,
@@ -906,22 +857,18 @@ class Agent:
 
         # Validate parameters
         try:
+            if tool_name.startswith("mcp_"):
+                from jsonschema import validate
+                validate(instance=args, schema=tool.get_schema())
             params = tool.params_model.model_validate(args)
         except Exception as e:
-            if tool_name.startswith("mcp_"):
-                params = args
-                logger.debug(
-                    "MCP tool %s param validation failed (%s), passing raw args",
-                    tool_name, e,
-                )
-            else:
-                yield ToolResultEvent(
-                    tool_id=tc.id,
-                    tool_name=tool_name,
-                    result=f"Parameter validation error: {e}",
-                    is_error=True,
-                )
-                return
+            yield ToolResultEvent(
+                tool_id=tc.id,
+                tool_name=tool_name,
+                result=f"Parameter validation error: {e}",
+                is_error=True,
+            )
+            return
 
         # Execute
         try:
@@ -943,7 +890,7 @@ class Agent:
             for hev in self._drain_hook_events():
                 yield hev
 
-        processed = self._maybe_persist_or_truncate(result.output)
+        processed = self._maybe_persist_or_truncate(result.output, tc.id)
         yield ToolResultEvent(
             tool_id=tc.id,
             tool_name=tool_name,
@@ -951,12 +898,12 @@ class Agent:
             is_error=result.is_error,
         )
 
-    def _maybe_persist_or_truncate(self, output: str) -> str:
+    def _maybe_persist_or_truncate(self, output: str, tool_use_id: str | None = None) -> str:
         """Persist large tool results to disk and return a preview, or truncate if still too big."""
         from cccode.context import persist_tool_result, make_persisted_preview
         if len(output) > SINGLE_RESULT_CHAR_LIMIT:
-            preview = persist_tool_result(output, self.session_dir)
-            return make_persisted_preview(preview)
+            path = persist_tool_result(tool_use_id or uuid.uuid4().hex, output, self.session_dir)
+            return make_persisted_preview(output, path)
         elif len(output) > MAX_OUTPUT_CHARS:
             return output[:MAX_OUTPUT_CHARS] + "\n… (output truncated)"
         else:

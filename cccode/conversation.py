@@ -219,17 +219,15 @@ class ConversationManager:
                 and _is_reminder(m)
             ):
                 prev = merged[-1]
-                prev_text = (
-                    prev["content"]
-                    if isinstance(prev["content"], str)
-                    else ""
-                )
                 new_text = (
                     m["content"]
                     if isinstance(m["content"], str)
                     else ""
                 )
-                prev["content"] = prev_text + "\n" + new_text
+                if isinstance(prev["content"], list):
+                    prev["content"].append({"type": "text", "text": new_text})
+                else:
+                    prev["content"] = prev["content"] + "\n" + new_text
             else:
                 merged.append(m)
 

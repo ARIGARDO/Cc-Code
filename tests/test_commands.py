@@ -359,17 +359,17 @@ class TestMemoryHandler:
 # ── TestRegisterAllCommands ─────────────────
 
 class TestRegisterAllCommands:
-    def test_all_10_commands_registered(self):
+    def test_all_commands_registered(self):
         reg = CommandRegistry()
         register_all_commands(reg)
-        expected = {"help", "clear", "compact", "plan", "do", "session", "memory", "permission", "status", "skill"}
+        expected = {"help", "clear", "compact", "plan", "do", "session", "memory", "permission", "status", "skill", "team", "worktree"}
         actual = {cmd.name for cmd in reg.list_commands(include_hidden=True)}
         assert actual == expected
 
     def test_no_alias_conflicts(self):
         reg = CommandRegistry()
         register_all_commands(reg)
-        assert len(reg.list_commands(include_hidden=True)) == 10
+        assert len(reg.list_commands(include_hidden=True)) == 12
 
     def test_aliases_work(self):
         reg = CommandRegistry()

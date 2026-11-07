@@ -190,7 +190,11 @@ def cleanup_tool_results(session_dir: Path) -> None:
 def persist_tool_result(
     tool_use_id: str, content: str, session_dir: Path
 ) -> Path:
+    import hashlib
+
     session_dir.mkdir(parents=True, exist_ok=True)
+    if not tool_use_id or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in tool_use_id):
+        tool_use_id = hashlib.sha256(tool_use_id.encode("utf-8")).hexdigest()
     file_path = session_dir / f"{tool_use_id}.txt"
     try:
         fd = os.open(

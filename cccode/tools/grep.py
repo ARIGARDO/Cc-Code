@@ -47,7 +47,7 @@ class Grep(Tool):
         for p in base.rglob("*"):
             if any(part in SKIP_DIRS for part in p.parts):
                 continue
-            if not p.is_file():
+            if not p.is_file() or not p.resolve().is_relative_to(base.resolve()):
                 continue
             if include_glob is not None and not p.match(include_glob):
                 continue

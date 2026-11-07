@@ -60,7 +60,6 @@ class Tool(ABC):
             return {"type": "object", "properties": {}}
         # Remove Pydantic noise
         raw.pop("title", None)
-        raw.pop("$defs", None)
         return raw
 
     @abstractmethod

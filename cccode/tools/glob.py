@@ -30,12 +30,15 @@ class Glob(Tool):
         base = Path(resolve_path(params.path)).expanduser()
         if not base.is_dir():
             return ToolResult(f"Error: not a directory: {base}", is_error=True)
+        pattern = Path(params.pattern)
+        if pattern.is_absolute() or ".." in pattern.parts:
+            return ToolResult("Error: pattern must stay within the search directory", is_error=True)
 
         results: list[str] = []
         for p in base.glob(params.pattern):
             if any(part in SKIP_DIRS for part in p.parts):
                 continue
-            if p.is_file():
+            if p.is_file() and p.resolve().is_relative_to(base.resolve()):
                 results.append(str(p.relative_to(base)))
 
         results.sort()

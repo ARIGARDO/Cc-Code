@@ -17,137 +17,12 @@ _DANGEROUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 
-_SAFE_COMMANDS: frozenset[str] = frozenset({
-    "ls",
-    "ll",
-    "pwd",
-    "whoami",
-    "id",
-    "uname",
-    "hostname",
-    "date",
-    "uptime",
-    "df",
-    "du",
-    "free",
-    "top",
-    "ps",
-    "cat",
-    "head",
-    "tail",
-    "less",
-    "more",
-    "wc",
-    "file",
-    "stat",
-    "which",
-    "whereis",
-    "find",
-    "locate",
-    "echo",
-    "printf",
-    "tee",
-    "sort",
-    "uniq",
-    "diff",
-    "comm",
-    "cut",
-    "paste",
-    "tr",
-    "fold",
-    "fmt",
-    "column",
-    "expand",
-    "unexpand",
-    "od",
-    "hexdump",
-    "xxd",
-    "md5sum",
-    "sha1sum",
-    "sha256sum",
-    "sha512sum",
-    "base64",
-    "basename",
-    "dirname",
-    "realpath",
-    "readlink",
-    "tree",
-    "type",
-    "command",
-    "env",
-    "printenv",
-    "set",
-    "export",
-    "alias",
-    "unalias",
-    "history",
-    "git status",
-    "git diff",
-    "git log",
-    "git show",
-    "git branch",
-    "git tag",
-    "git remote",
-    "git stash list",
-    "git config",
-    "git rev-parse",
-    "git ls-files",
-    "git ls-tree",
-    "git describe",
-    "git shortlog",
-    "git reflog",
-    "git blame",
-    "git whatchanged",
-    "git var",
-    "go version",
-    "go env",
-    "go list",
-    "go vet",
-    "go doc",
-    "python --version",
-    "python3 --version",
-    "python -c",
-    "python3 -c",
-    "pip list",
-    "pip show",
-    "pip freeze",
-    "npm -v",
-    "node -v",
-    "npx -v",
-    "yarn -v",
-    "pnpm -v",
-    "rustc --version",
-    "cargo --version",
-    "java -version",
-    "javac -version",
-    "mvn -version",
-    "gradle -version",
-    "ruby --version",
-    "gem --version",
-    "bundle --version",
-    "php --version",
-    "composer --version",
-    "dotnet --version",
-    "docker version",
-    "docker info",
-    "docker images",
-    "docker ps",
-    "make -n",
-    "cmake --version",
-    "gcc --version",
-    "g++ --version",
-    "clang --version",
-    "rustfmt --version",
-    "cargo fmt --check",
-    "ruff --version",
-    "mypy --version",
-    "pytest --version",
-    "black --version",
-    "isort --version",
-    "pre-commit --version",
+# Only commands whose complete argument forms are known to be read-only.
+_SAFE_COMMANDS = frozenset({
+    "ls", "pwd", "whoami", "id", "uname", "hostname", "date", "uptime",
+    "python --version", "python3 --version", "node --version", "node -v",
+    "npm -v", "ruff --version", "pytest --version",
 })
-
-_SHELL_METACHARACTERS = frozenset({"|", ";", "&&", ">", "$(", "`"})
 
 
 class DangerousCommandDetector:
@@ -164,15 +39,18 @@ class DangerousCommandDetector:
 
 
 def is_safe_command(command: str) -> bool:
-    stripped = command.strip()
-    if not stripped:
+    """Recognize a deliberately small set of commands, never shell syntax."""
+    import shlex
+
+    if any(char in command for char in "\n\r;|&<>$`\\*?[]{}()"):
         return False
-    for meta in _SHELL_METACHARACTERS:
-        if meta in stripped:
-            return False
-    if stripped in _SAFE_COMMANDS:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+    if not parts:
+        return False
+    if " ".join(parts) in _SAFE_COMMANDS:
         return True
-    for safe in _SAFE_COMMANDS:
-        if stripped.startswith(safe + " "):
-            return True
-    return False
+    # ls accepts paths and flags, but not shell expansion or additional commands.
+    return parts[0] == "ls" and all(not part.startswith("--") for part in parts[1:])

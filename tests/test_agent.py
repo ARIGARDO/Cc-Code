@@ -955,15 +955,15 @@ class TestSystemPrompt:
         reminder = build_plan_mode_reminder(
             Path("/tmp/plan.md"), plan_exists=False, iteration=1,
         )
-        assert "plan mode" in reminder.lower()
-        assert "MUST NOT" in reminder
+        assert "计划模式" in reminder
+        assert "不能使用任何写入工具" in reminder
 
     def test_build_plan_mode_reminder_sparse(self) -> None:
         from cccode.prompts import build_plan_mode_reminder
         reminder = build_plan_mode_reminder(
             Path("/tmp/plan.md"), plan_exists=False, iteration=8,
         )
-        assert "Plan mode still active" in reminder
+        assert "计划模式仍然激活" in reminder
 
     def test_build_environment_context(self) -> None:
         from cccode.prompts import build_environment_context
@@ -1022,8 +1022,8 @@ class TestSystemPrompt:
     def test_prompt_section_key_fragments(self) -> None:
         from cccode.prompts import build_system_prompt
         prompt = build_system_prompt(work_dir="/home/user/project")
-        assert "IMPORTANT: Be careful not to introduce security" in prompt
+        assert "注意不要引入安全漏洞" in prompt
         assert "<system-reminder>" in prompt
-        assert "Only use emojis if the user explicitly requests it" in prompt
+        assert "只有在用户明确要求时才使用 emoji" in prompt
         assert "file_path:line_number" in prompt
-        assert "Do not use a colon before tool calls" in prompt
+        assert "在工具调用之前不要使用冒号" in prompt

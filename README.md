@@ -8,7 +8,7 @@ CcCode 提供本地浏览器界面，通过与 LLM 对话来辅助软件工程�
 
 - **LLM 多供应商** — 通过统一流式接口支持 Anthropic (Claude) 和 OpenAI，支持 Extended Thinking。
 - **Agent 循环** — 自主工具调用 Agent，可读取文件、执行 Shell 命令、搜索代码和编辑文件。
-- **权限系统** — 多模式权限控制（default / accept-edits / plan / bypass / custom），支持沙箱化文件访问。
+- **权限系统** — 多模式权限控制（default / accept-edits / plan / bypass / custom），对文件工具进行路径检查。Bash 命令没有操作系统级沙箱隔离。
 - **MCP 支持** — 集成 Model Context Protocol，可扩展外部工具提供者。
 - **团队协作** — 基于邮箱消息传递的多 Agent 协调机制。
 - **技能系统** — 可复用的 Agent 技能（commit / review / test / backend-interview），支持内置与自定义技能。

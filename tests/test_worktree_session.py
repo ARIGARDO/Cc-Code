@@ -16,33 +16,30 @@ from cccode.worktree.session import (
 class TestWorktreeSession:
     def test_roundtrip(self) -> None:
         s = WorktreeSession(
-            slug="alice",
-            flat_slug="alice",
+            original_cwd="/tmp/project",
             worktree_path="/tmp/test",
-            branch="worktree-alice",
-            serial=1,
+            worktree_name="alice",
+            original_branch="main",
+            original_head_commit="abc123",
+            session_id="session-1",
         )
-        assert s.slug == "alice"
-        assert s.flat_slug == "alice"
+        assert s.worktree_name == "alice"
         assert s.worktree_path == "/tmp/test"
-        assert s.branch == "worktree-alice"
-        assert s.serial == 1
+        assert s.original_branch == "main"
+        assert s.session_id == "session-1"
 
     def test_dict_roundtrip(self) -> None:
         s = WorktreeSession(
-            slug="alice",
-            flat_slug="alice",
+            original_cwd="/tmp/project",
             worktree_path="/tmp/test",
-            branch="worktree-alice",
-            serial=1,
+            worktree_name="alice",
+            original_branch="main",
+            original_head_commit="abc123",
+            session_id="session-1",
         )
         d = s.to_dict()
-        s2 = WorktreeSession.from_dict(d)
-        assert s2.slug == s.slug
-        assert s2.flat_slug == s.flat_slug
-        assert s2.worktree_path == s.worktree_path
-        assert s2.branch == s.branch
-        assert s2.serial == s.serial
+        s2 = WorktreeSession.from_json(s.to_json())
+        assert s2.to_dict() == d
 
 
 class TestSessionPersistence:
@@ -52,18 +49,19 @@ class TestSessionPersistence:
 
         try:
             s = WorktreeSession(
-                slug="alice",
-                flat_slug="alice",
+                original_cwd="/tmp/project",
                 worktree_path="/tmp/test",
-                branch="worktree-alice",
-                serial=2,
+                worktree_name="alice",
+                original_branch="main",
+                original_head_commit="abc123",
+                session_id="session-2",
             )
             save_session(path, s)
 
             loaded = load_session(path)
             assert loaded is not None
-            assert loaded.slug == "alice"
-            assert loaded.serial == 2
+            assert loaded.worktree_name == "alice"
+            assert loaded.session_id == "session-2"
         finally:
             path.unlink(missing_ok=True)
 
@@ -88,11 +86,12 @@ class TestSessionPersistence:
 
         try:
             s = WorktreeSession(
-                slug="alice",
-                flat_slug="alice",
+                original_cwd="/tmp/project",
                 worktree_path="/tmp/test",
-                branch="worktree-alice",
-                serial=1,
+                worktree_name="alice",
+                original_branch="main",
+                original_head_commit="abc123",
+                session_id="session-1",
             )
             save_session(path, s)
             clear_session(path)

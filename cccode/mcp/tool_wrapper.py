@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from cccode.tools.base import Tool, ToolResult
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 #  JSON Schema → pydantic model (T6)
 # ──────────────────────────────────────────────
 
-def _json_type_to_python(json_type: str) -> Any:
+def _json_type_to_python(json_type: Any) -> Any:
     mapping = {
         "string": str,
         "integer": int,
@@ -25,6 +25,13 @@ def _json_type_to_python(json_type: str) -> Any:
         "object": dict,
         "array": list,
     }
+    if isinstance(json_type, list):
+        types = [_json_type_to_python(t) if t != "null" else type(None) for t in json_type]
+        if not types:
+            return Any
+        from functools import reduce
+        from operator import or_
+        return reduce(or_, types)
     return mapping.get(json_type, Any)
 
 
@@ -47,7 +54,8 @@ def _build_params_model(
             fields[prop_name] = (Optional[py_type], Field(None, description=description))
 
     safe_name = "".join(c if c.isalnum() or c == "_" else "_" for c in tool_name)
-    model = create_model(f"{safe_name}Params", **fields)  # type: ignore[arg-type]
+    extra = "allow" if input_schema.get("additionalProperties", True) is not False else "forbid"
+    model = create_model(f"{safe_name}Params", __config__=ConfigDict(extra=extra), **fields)  # type: ignore[arg-type]
     return model
 
 
@@ -112,9 +120,7 @@ class MCPToolWrapper(Tool):
         schema = getattr(self._tool_def, "inputSchema", None)
         if not schema or not isinstance(schema, dict):
             return {"type": "object", "properties": {}}
-        cleaned = {k: v for k, v in schema.items()
-                   if k not in ("$schema", "additionalProperties", "title")}
-        return cleaned
+        return schema
 
     async def execute(self, params: Any) -> ToolResult:
         """Call the MCP tool, with lazy reconnect on dead session."""
@@ -123,7 +129,7 @@ class MCPToolWrapper(Tool):
                 await self._client.connect()
 
             if isinstance(params, BaseModel):
-                arguments = params.model_dump(exclude_none=True)
+                arguments = params.model_dump(exclude_unset=True)
             elif isinstance(params, dict):
                 arguments = params
             else:

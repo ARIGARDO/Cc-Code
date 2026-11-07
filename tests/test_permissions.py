@@ -116,7 +116,8 @@ class TestSafeCommand:
         assert is_safe_command("ls -la /tmp")
 
     def test_git_status(self) -> None:
-        assert is_safe_command("git status")
+        # Git can invoke configured helpers such as fsmonitor.
+        assert not is_safe_command("git status")
 
     def test_python_version(self) -> None:
         assert is_safe_command("python --version")

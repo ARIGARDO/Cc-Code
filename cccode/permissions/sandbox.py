@@ -27,13 +27,7 @@ class PathSandbox:
         if not expanded.is_absolute():
             expanded = self._project_root / expanded
         try:
-            resolved = expanded.resolve(strict=True)
-        except FileNotFoundError:
-            try:
-                parent_resolved = expanded.parent.resolve(strict=True)
-                resolved = parent_resolved / expanded.name
-            except FileNotFoundError:
-                return (False, f"路径 {path} 超出沙箱范围")
+            resolved = expanded.resolve(strict=False)
         except Exception:
             return (False, f"路径 {path} 超出沙箱范围")
         for root in self._allowed_roots:
