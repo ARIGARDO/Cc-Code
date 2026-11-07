@@ -97,7 +97,7 @@ cccode/
 ├── tests/                    # 测试套件
 ├── pyproject.toml            # 项目元数据与依赖
 ├── config.yaml               # 用户配置（已 gitignore）
-└── CLAUDE.md                 # AI 助手的项目约定
+└── CCCODE.md                 # AI 助手的项目约定
 ```
 
 ## 开发指南
