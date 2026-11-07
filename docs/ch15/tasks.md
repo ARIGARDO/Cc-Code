@@ -2,55 +2,55 @@
 
 | 操作 | 文件 | 职责 |
 |------|------|------|
-| 新建 | `src/mewcode/team/__init__.py` | 包导出 |
-| 新建 | `src/mewcode/team/types.py` | Team / TeammateInfo / BackendType 等类型 |
-| 新建 | `src/mewcode/team/persistence.py` | sanitize、原子写、reload_from_disk_locked |
-| 新建 | `src/mewcode/team/manager.py` | Manager.create/get/delete/add_member/set_member_active/remove_member |
+| 新建 | `src/cccode/team/__init__.py` | 包导出 |
+| 新建 | `src/cccode/team/types.py` | Team / TeammateInfo / BackendType 等类型 |
+| 新建 | `src/cccode/team/persistence.py` | sanitize、原子写、reload_from_disk_locked |
+| 新建 | `src/cccode/team/manager.py` | Manager.create/get/delete/add_member/set_member_active/remove_member |
 | 新建 | `tests/test_team_manager.py` | Manager 单测 |
-| 新建 | `src/mewcode/team/spawn.py` | spawn_teammate 主流程 |
+| 新建 | `src/cccode/team/spawn.py` | spawn_teammate 主流程 |
 | 新建 | `tests/test_team_spawn.py` | spawn 单测(in-process 路径) |
-| 新建 | `src/mewcode/team/feature.py` | FORK_TEAMMATE flag 读取 |
-| 新建 | `src/mewcode/team/mailbox/__init__.py` | Box.read/write/mark_read + Message 类型 |
-| 新建 | `src/mewcode/team/mailbox/lock.py` | 文件锁机制 |
-| 新建 | `src/mewcode/team/mailbox/message.py` | Message / MessageType |
+| 新建 | `src/cccode/team/feature.py` | FORK_TEAMMATE flag 读取 |
+| 新建 | `src/cccode/team/mailbox/__init__.py` | Box.read/write/mark_read + Message 类型 |
+| 新建 | `src/cccode/team/mailbox/lock.py` | 文件锁机制 |
+| 新建 | `src/cccode/team/mailbox/message.py` | Message / MessageType |
 | 新建 | `tests/test_team_mailbox.py` | 并发与 stale 锁测试 |
-| 新建 | `src/mewcode/team/registry/__init__.py` | AgentNameRegistry |
+| 新建 | `src/cccode/team/registry/__init__.py` | AgentNameRegistry |
 | 新建 | `tests/test_team_registry.py` | 注册/解析/反查测试 |
-| 新建 | `src/mewcode/team/tasks/__init__.py` | Task / Store / Filter / Patch |
+| 新建 | `src/cccode/team/tasks/__init__.py` | Task / Store / Filter / Patch |
 | 新建 | `tests/test_team_tasks.py` | CRUD + 依赖关系测试 |
-| 新建 | `src/mewcode/team/backend/__init__.py` | Backend Protocol + SpawnRequest + new_backend |
-| 新建 | `src/mewcode/team/backend/detect.py` | detect() |
+| 新建 | `src/cccode/team/backend/__init__.py` | Backend Protocol + SpawnRequest + new_backend |
+| 新建 | `src/cccode/team/backend/detect.py` | detect() |
 | 新建 | `tests/test_team_backend_detect.py` | 检测逻辑测试 |
-| 新建 | `src/mewcode/team/backend/tmux.py` | Tmux Backend |
+| 新建 | `src/cccode/team/backend/tmux.py` | Tmux Backend |
 | 新建 | `tests/test_team_backend_tmux.py` | tmux 命令构造测试 |
-| 新建 | `src/mewcode/team/backend/iterm2.py` | iTerm2 Backend |
+| 新建 | `src/cccode/team/backend/iterm2.py` | iTerm2 Backend |
 | 新建 | `tests/test_team_backend_iterm2.py` | iterm2 命令构造测试 |
-| 新建 | `src/mewcode/team/backend/inprocess.py` | InProcess Backend |
+| 新建 | `src/cccode/team/backend/inprocess.py` | InProcess Backend |
 | 新建 | `tests/test_team_backend_inprocess.py` | in-process spawn 集成测试 |
-| 新建 | `src/mewcode/team/tools/team_create.py` | TeamCreate 工具 |
-| 新建 | `src/mewcode/team/tools/team_delete.py` | TeamDelete 工具 |
-| 新建 | `src/mewcode/team/tools/task_create.py` | TaskCreate 工具 |
-| 新建 | `src/mewcode/team/tools/task_get.py` | TaskGet 工具 |
-| 新建 | `src/mewcode/team/tools/task_list.py` | TaskList 工具 |
-| 新建 | `src/mewcode/team/tools/task_update.py` | TaskUpdate 工具 |
-| 新建 | `src/mewcode/team/tools/send_message.py` | SendMessage 工具 |
-| 新建 | `src/mewcode/team/tools/teammate_filter.py` | 队员专属工具白名单 |
+| 新建 | `src/cccode/team/tools/team_create.py` | TeamCreate 工具 |
+| 新建 | `src/cccode/team/tools/team_delete.py` | TeamDelete 工具 |
+| 新建 | `src/cccode/team/tools/task_create.py` | TaskCreate 工具 |
+| 新建 | `src/cccode/team/tools/task_get.py` | TaskGet 工具 |
+| 新建 | `src/cccode/team/tools/task_list.py` | TaskList 工具 |
+| 新建 | `src/cccode/team/tools/task_update.py` | TaskUpdate 工具 |
+| 新建 | `src/cccode/team/tools/send_message.py` | SendMessage 工具 |
+| 新建 | `src/cccode/team/tools/teammate_filter.py` | 队员专属工具白名单 |
 | 新建 | `tests/test_team_tools.py` | 工具单测 |
-| 新建 | `src/mewcode/coordinator/__init__.py` | is_enabled/allowed_tools/system_prompt_suffix |
+| 新建 | `src/cccode/coordinator/__init__.py` | is_enabled/allowed_tools/system_prompt_suffix |
 | 新建 | `tests/test_coordinator.py` | 双锁测试 |
-| 新建 | `src/mewcode/agent/team_hook.py` | TeamHook Protocol + TeammateContext |
-| 修改 | `src/mewcode/agent/agent_tool.py` | 增加 team_name 参数 + TeamHook 委托 + with_team_hook 构造选项 |
-| 新建 | `src/mewcode/agent/team_mailbox.py` | Loop 头部注入 incoming-messages reminder |
-| 修改 | `src/mewcode/task/manager.py` | 加 on_task_done 回调;改用 registry.AgentNameRegistry |
-| 修改 | `src/mewcode/tool/filter.py` | 新增 TEAMMATE_ALLOWED_TOOLS,扩展 FilterParams 加 teammate bool |
-| 新建 | `src/mewcode/command/builtin_team.py` | /team list/info/delete/kill 4 个命令 |
-| 修改 | `src/mewcode/tui/app.py` 与相关文件 | 接收 team_mgr、coordinator 标签 |
-| 修改 | `src/mewcode/config/__init__.py` | Features 字段新增 coordinator_mode 与 fork_teammate |
-| 修改 | `src/mewcode/cli/__init__.py` | wire team.Manager / coordinator,注册 7 个工具 |
-| 新建 | `src/mewcode/cli/team_member.py` | --team-member 自治循环 |
-| 修改 | `.mewcode/config.yaml.example` | 加示例 features 段(可选,不强制) |
+| 新建 | `src/cccode/agent/team_hook.py` | TeamHook Protocol + TeammateContext |
+| 修改 | `src/cccode/agent/agent_tool.py` | 增加 team_name 参数 + TeamHook 委托 + with_team_hook 构造选项 |
+| 新建 | `src/cccode/agent/team_mailbox.py` | Loop 头部注入 incoming-messages reminder |
+| 修改 | `src/cccode/task/manager.py` | 加 on_task_done 回调;改用 registry.AgentNameRegistry |
+| 修改 | `src/cccode/tool/filter.py` | 新增 TEAMMATE_ALLOWED_TOOLS,扩展 FilterParams 加 teammate bool |
+| 新建 | `src/cccode/command/builtin_team.py` | /team list/info/delete/kill 4 个命令 |
+| 修改 | `src/cccode/tui/app.py` 与相关文件 | 接收 team_mgr、coordinator 标签 |
+| 修改 | `src/cccode/config/__init__.py` | Features 字段新增 coordinator_mode 与 fork_teammate |
+| 修改 | `src/cccode/cli/__init__.py` | wire team.Manager / coordinator,注册 7 个工具 |
+| 新建 | `src/cccode/cli/team_member.py` | --team-member 自治循环 |
+| 修改 | `.cccode/config.yaml.example` | 加示例 features 段(可选,不强制) |
 
-## T1: 基础类型 — `src/mewcode/team/types.py`**文件:** `src/mewcode/team/types.py`
+## T1: 基础类型 — `src/cccode/team/types.py`**文件:** `src/cccode/team/types.py`
 **依赖:** 无
 **步骤:**
 1. 定义 `BackendType(StrEnum)` 含 `TMUX` / `ITERM2` / `IN_PROCESS`
@@ -58,9 +58,9 @@
 3. 定义 `@dataclass class TeammateInfo`(F2),字段对应 json key(下划线命名)
 4. 定义异常类 `TeamNotFoundError` / `TeamHasActiveMembersError` / `MemberExistsError` / `MemberNotFoundError` / `InProcessTeammateNoSpawnError`,统一基类 `TeamError`
 
-**验证:** `python -c "from mewcode.team.types import Team, TeammateInfo, BackendType"` 不报错;`ruff check src/mewcode/team/types.py` 通过
+**验证:** `python -c "from cccode.team.types import Team, TeammateInfo, BackendType"` 不报错;`ruff check src/cccode/team/types.py` 通过
 
-## T2: sanitize 与原子写 — `src/mewcode/team/persistence.py`**文件:** `src/mewcode/team/persistence.py`
+## T2: sanitize 与原子写 — `src/cccode/team/persistence.py`**文件:** `src/cccode/team/persistence.py`
 **依赖:** T1
 **步骤:**
 1. 实现 `sanitize(name: str) -> str`——只保留 `[a-zA-Z0-9._-]`,其他字符替换为 `-`,首尾去 `-`,空字符串返回 `""`(用 `re.sub`)
@@ -69,12 +69,12 @@
 
 **验证:** 单测断言 `sanitize("foo bar/baz")=="foo-bar-baz"`;`atomic_write_json` 写入后 `read_json` 取回相等
 
-## T3: Manager 与持久化 — `src/mewcode/team/manager.py`**文件:** `src/mewcode/team/manager.py`
+## T3: Manager 与持久化 — `src/cccode/team/manager.py`**文件:** `src/cccode/team/manager.py`
 **依赖:** T1, T2
 **步骤:**
 1. 定义 `class Manager`(F3)
 2. 实现 `Manager.__init__(home_dir, project_root, wt_mgr, task_mgr, reg)`(F4)
-   - 创建 `<home_dir>/.mewcode/teams/` 目录
+   - 创建 `<home_dir>/.cccode/teams/` 目录
    - 扫描子目录,逐个读 `config.json`(失败 stderr 警告并跳过)
    - 反序列化后填充派生路径字段
 3. 实现 `Manager.get(name: str) -> Team | None`
@@ -95,7 +95,7 @@
 
 **验证:** 写单测覆盖 create/get/delete 基本流程;`pytest tests/test_team_manager.py` 通过;tmux 实跑后 `/team delete --force` 看 pane 真的被杀(`tmux list-panes` 只剩 Lead)
 
-## T3b: Team.Manager 跨进程并发兜底 — 继续 `src/mewcode/team/manager.py` + `src/mewcode/team/persistence.py`**文件:** `src/mewcode/team/manager.py`(为 add_member / set_member_active 加 reload-before-modify)、`src/mewcode/team/persistence.py`(增加 `reload_from_disk_locked`)
+## T3b: Team.Manager 跨进程并发兜底 — 继续 `src/cccode/team/manager.py` + `src/cccode/team/persistence.py`**文件:** `src/cccode/team/manager.py`(为 add_member / set_member_active 加 reload-before-modify)、`src/cccode/team/persistence.py`(增加 `reload_from_disk_locked`)
 **依赖:** T3
 **步骤:**
 1. `persistence.py` 增 `async def reload_from_disk_locked(team: Team) -> None`——调用方持锁;从 `team.config_path` `read_json`,把 `members` 字段覆盖到 in-memory(失败静默回退到内存现状)
@@ -104,7 +104,7 @@
 
 **验证:** 单测构造时序:t1 = read_json 得到无 alice 的 Team A;t2 在 disk 上写带 alice 的 Team B;t3 调 `await team.set_member_active("alice", False)` 应该成功(走 reload 路径)而非静默 no-op
 
-## T4: Team 成员操作 — 继续 `src/mewcode/team/manager.py`**文件:** `src/mewcode/team/manager.py`(同 T3)
+## T4: Team 成员操作 — 继续 `src/cccode/team/manager.py`**文件:** `src/cccode/team/manager.py`(同 T3)
 **依赖:** T3
 **步骤:**
 1. 实现 `async Team.add_member(info)`(F8)——加锁后**先 reload_from_disk_locked**(见 T3b),检查重名;加入 members;持久化
@@ -114,7 +114,7 @@
 
 **验证:** 单测覆盖 add → set_active → remove 三步流程,读回 config.json 校验字段
 
-## T5: mailbox 文件锁 — `src/mewcode/team/mailbox/lock.py`**文件:** `src/mewcode/team/mailbox/lock.py`
+## T5: mailbox 文件锁 — `src/cccode/team/mailbox/lock.py`**文件:** `src/cccode/team/mailbox/lock.py`
 **依赖:** 无
 **步骤:**
 1. 实现 `async def acquire_lock(lock_path: str) -> AsyncContextManager[None]`——
@@ -126,7 +126,7 @@
 
 **验证:** 单测 `test_acquire_lock_serial`(两次抢锁,中间 release)、`test_acquire_lock_stale`(故意创建 11 秒前的锁——`os.utime(lock_path, (now-11, now-11))`,断言能拿到)
 
-## T6: mailbox Message 与 Box — `src/mewcode/team/mailbox/__init__.py` + `message.py`**文件:** `src/mewcode/team/mailbox/__init__.py`、`src/mewcode/team/mailbox/message.py`
+## T6: mailbox Message 与 Box — `src/cccode/team/mailbox/__init__.py` + `message.py`**文件:** `src/cccode/team/mailbox/__init__.py`、`src/cccode/team/mailbox/message.py`
 **依赖:** T5
 **步骤:**
 1. `message.py` 定义 `MessageType(StrEnum)` 与 4 个常量(F32)
@@ -145,7 +145,7 @@
 
 **验证:** 单测覆盖 write/read/mark_read;并发测试 10 个 asyncio task 写同一 agent_id,断言读回 10 条无丢失
 
-## T7: AgentNameRegistry — `src/mewcode/team/registry/__init__.py`**文件:** `src/mewcode/team/registry/__init__.py`
+## T7: AgentNameRegistry — `src/cccode/team/registry/__init__.py`**文件:** `src/cccode/team/registry/__init__.py`
 **依赖:** 无
 **步骤:**
 1. 定义 `class AgentNameRegistry`
@@ -159,41 +159,41 @@
 
 **验证:** 单测覆盖 register/unregister/resolve/name_of;包括「同名覆盖」和「不同名指向同一 agent_id」边界
 
-## T8: tasks Store — `src/mewcode/team/tasks/__init__.py`**文件:** `src/mewcode/team/tasks/__init__.py`
+## T8: tasks Store — `src/cccode/team/tasks/__init__.py`**文件:** `src/cccode/team/tasks/__init__.py`
 **依赖:** T5(用 mailbox 的 lock)
 **步骤:**
 1. 定义 `Status(StrEnum)` / `Task` / `Filter` / `Patch` 类型(F30)
 2. 定义 `class Store`,字段 `_path: str`, `_lock: asyncio.Lock`
 3. 实现 `__init__(path)`
-4. 实现 `async create(t) -> str`——生成 `task_<6 位 hex>` ID(`secrets.token_hex(3)`);read-modify-write `tasks.json`(用 lock 文件,路径 `<path>.lock`,复用 mailbox 的 `acquire_lock`——把它提到 `mewcode.team.filelock` 共用包,或直接在 tasks 包内复制小段实现)
+4. 实现 `async create(t) -> str`——生成 `task_<6 位 hex>` ID(`secrets.token_hex(3)`);read-modify-write `tasks.json`(用 lock 文件,路径 `<path>.lock`,复用 mailbox 的 `acquire_lock`——把它提到 `cccode.team.filelock` 共用包,或直接在 tasks 包内复制小段实现)
 5. 实现 `async get(id_) -> Task`
 6. 实现 `async list_(f: Filter) -> list[Task]`——按 `status` 过滤,返回时附加 `is_ready` 字段(检查 blocked_by 中所有任务是否 completed);为简化可在 list_ 输出时计算 ready 标记,不存盘
 7. 实现 `async update(id_, p: Patch)`——支持 title/description/status/assignee/add_blocks/add_blocked_by/remove_blocks/remove_blocked_by 字段
 8. `add_blocked_by=[X]` 同时给 X 任务 `blocks` 加上当前任务 id(双向维护)
 
-**注意:** 为减小循环依赖,把 `acquire_lock` 提到独立 `mewcode.team.filelock` 模块,mailbox 与 tasks 共用。
+**注意:** 为减小循环依赖,把 `acquire_lock` 提到独立 `cccode.team.filelock` 模块,mailbox 与 tasks 共用。
 
 **验证:** 单测覆盖 create/get/update;特别测 add_blocked_by 的双向更新
 
-## T9: 共用 filelock 模块(从 mailbox 抽出)**文件:** `src/mewcode/team/filelock.py`(把 T5 实现迁过来)
+## T9: 共用 filelock 模块(从 mailbox 抽出)**文件:** `src/cccode/team/filelock.py`(把 T5 实现迁过来)
 **依赖:** 无
 **步骤:**
-1. 把 T5 的 `acquire_lock` 实现迁到 `mewcode.team.filelock`,签名保持 `async def acquire(lock_path) -> AsyncContextManager[None]`
-2. 在 `mailbox/lock.py` 改为 `from mewcode.team.filelock import acquire`,删除本地实现
+1. 把 T5 的 `acquire_lock` 实现迁到 `cccode.team.filelock`,签名保持 `async def acquire(lock_path) -> AsyncContextManager[None]`
+2. 在 `mailbox/lock.py` 改为 `from cccode.team.filelock import acquire`,删除本地实现
 3. 在 `tasks/__init__.py` 也 import `filelock`
 
 **验证:** `pytest tests/test_team_*.py` 全过
 
-## T10: backend Protocol — `src/mewcode/team/backend/__init__.py`**文件:** `src/mewcode/team/backend/__init__.py`
+## T10: backend Protocol — `src/cccode/team/backend/__init__.py`**文件:** `src/cccode/team/backend/__init__.py`
 **依赖:** T1
 **步骤:**
 1. 定义 `@dataclass class SpawnRequest`(F13)——其中 `sub_agent` / `conv` / `task_mgr` 字段类型为 `Any`,避免 backend 反向依赖 agent 包
 2. 定义 `Backend` Protocol(F12):`type() -> BackendType`、`async spawn(req) -> tuple[str, str]`(返回 `(pane_id, agent_id)`)、`async wake(pane_id, agent_id) -> None`、`async kill(pane_id, agent_id) -> None`
 3. 定义 `def new_backend(t: BackendType, **deps) -> Backend` 工厂——按类型分发(暂时只占位,具体实现在 T12-T14)
 
-**验证:** `python -c "from mewcode.team.backend import Backend, SpawnRequest, new_backend"` 通过
+**验证:** `python -c "from cccode.team.backend import Backend, SpawnRequest, new_backend"` 通过
 
-## T11: detect_backend — `src/mewcode/team/backend/detect.py`**文件:** `src/mewcode/team/backend/detect.py`
+## T11: detect_backend — `src/cccode/team/backend/detect.py`**文件:** `src/cccode/team/backend/detect.py`
 **依赖:** T10
 **步骤:**
 1. 实现 `def detect() -> BackendType`(F14):
@@ -204,7 +204,7 @@
 
 **验证:** 写 test 用 `monkeypatch.setenv` 控制环境变量 + monkeypatch.setattr 替换 `shutil.which`,断言不同组合的返回值
 
-## T12: tmux backend — `src/mewcode/team/backend/tmux.py`**文件:** `src/mewcode/team/backend/tmux.py`
+## T12: tmux backend — `src/cccode/team/backend/tmux.py`**文件:** `src/cccode/team/backend/tmux.py`
 **依赖:** T10
 **步骤:**
 1. 定义 `class TmuxBackend`
@@ -212,18 +212,18 @@
 3. 实现 `async spawn(req)`(F15):
    - 在 `$TMUX` 内:`tmux split-window -h -P -F "#{pane_id}" -- <cmd>`
    - 在 `$TMUX` 外但 `tmux` 二进制可用:`tmux new-session -d`(detached 新会话)走外部 session(F16)
-   - `cmd` 构造:`python -m mewcode --team-member --team <team_name> --member <member_name> --agent-id <agent_id> --session-dir <session_dir> --worktree <wt_path> [--agent-type <type>] [--model <model>] [--plan-mode]`(可用 `shlex.quote` 转义)
+   - `cmd` 构造:`python -m cccode --team-member --team <team_name> --member <member_name> --agent-id <agent_id> --session-dir <session_dir> --worktree <wt_path> [--agent-type <type>] [--model <model>] [--plan-mode]`(可用 `shlex.quote` 转义)
    - `--agent-id` 必须传——子进程不需要读 Lead 还没写完的 `config.json` 找自己
    - `initial_prompt` **不**走命令行,由 `team.spawn_teammate`(T18)在 `backend.spawn` 之前预写入 alice mailbox
    - 用 `await asyncio.create_subprocess_exec("tmux", ...)` 跑 tmux,捕获 stdout 作为 pane_id
 4. 实现 `async wake(pane_id, agent_id)`:`tmux send-keys -t <pane_id> "" Enter`(子进程 stdin reader 读到回车,立刻去 mailbox 轮询)
 5. 实现 `async kill(pane_id, agent_id)`:`tmux kill-pane -t <pane_id>`,忽略 pane not found 错误
 
-**注意:** spawn 启动的 mewcode CLI 需要支持 `--team-member` flag;这部分留给 T21(cli/__init__.py 改造)+ T29(team_member.py 新建)
+**注意:** spawn 启动的 cccode CLI 需要支持 `--team-member` flag;这部分留给 T21(cli/__init__.py 改造)+ T29(team_member.py 新建)
 
 **验证:** 单测断言命令字符串构造正确(用 monkeypatch.setattr 替换 `asyncio.create_subprocess_exec` 收 args);集成测试在 CI 跳过(需要 tmux)
 
-## T13: iterm2 backend — `src/mewcode/team/backend/iterm2.py`**文件:** `src/mewcode/team/backend/iterm2.py`
+## T13: iterm2 backend — `src/cccode/team/backend/iterm2.py`**文件:** `src/cccode/team/backend/iterm2.py`
 **依赖:** T10
 **步骤:**
 1. 实现 `Iterm2Backend.spawn`:`it2 split --new-pane --command "<cmd>"`(实际 it2 CLI 命令以官方为准;先按 README 描述实现,实测可能要调);`<cmd>` 同 T12 格式,含 `--agent-id`,`initial_prompt` 走 mailbox 预写
@@ -234,7 +234,7 @@
 
 **验证:** 单测断言命令构造正确
 
-## T14: in-process backend — `src/mewcode/team/backend/inprocess.py`**文件:** `src/mewcode/team/backend/inprocess.py`
+## T14: in-process backend — `src/cccode/team/backend/inprocess.py`**文件:** `src/cccode/team/backend/inprocess.py`
 **依赖:** T10,需要 `agent`、`task`、`conversation` 包
 **步骤:**
 1. 定义 `class InProcessBackend`,字段 `_task_mgr: task.Manager`
@@ -257,14 +257,14 @@ Pane 后端用 pane_id,in-process 用 agent_id;Protocol 统一传两者,各自�
 
 **验证:** 单测:构造 fake task_mgr,spawn 一个 noop 子 Agent,断言 asyncio task 启动
 
-## T15: feature flag — `src/mewcode/team/feature.py`**文件:** `src/mewcode/team/feature.py`
+## T15: feature flag — `src/cccode/team/feature.py`**文件:** `src/cccode/team/feature.py`
 **依赖:** 无
 **步骤:**
 1. 实现 `def fork_teammate_enabled(cfg: Config) -> bool`——读 `cfg.features.fork_teammate`
 
 **验证:** 单测覆盖 True/False 两种 cfg
 
-## T16: TeammateContext — `src/mewcode/agent/team_hook.py`**文件:** `src/mewcode/agent/team_hook.py`
+## T16: TeammateContext — `src/cccode/agent/team_hook.py`**文件:** `src/cccode/agent/team_hook.py`
 **依赖:** 无
 **步骤:**
 1. 定义 `TeamHook` Protocol(plan.md 已给签名)
@@ -272,9 +272,9 @@ Pane 后端用 pane_id,in-process 用 agent_id;Protocol 统一传两者,各自�
 3. 定义 `@dataclass class TeammateContext`——`team_name`、`member_name`、`agent_id`、`mailbox_dir`、`send_message_wake: Callable[[str], Awaitable[None]]` 等
 4. 提供 `WITH_TEAMMATE_KEY = "teammate"` + `with_teammate_context(ctx, tc) -> dict` + `teammate_context_from_ctx(ctx) -> TeammateContext | None`(用 dict 作为 ctx 容器或 `contextvars.ContextVar` 也行)
 
-**验证:** `python -c "from mewcode.agent.team_hook import TeamHook, TeammateContext"` 通过
+**验证:** `python -c "from cccode.agent.team_hook import TeamHook, TeammateContext"` 通过
 
-## T17: 队员专属工具白名单 — `src/mewcode/tool/filter.py` 扩展**文件:** `src/mewcode/tool/filter.py`(修改)
+## T17: 队员专属工具白名单 — `src/cccode/tool/filter.py` 扩展**文件:** `src/cccode/tool/filter.py`(修改)
 **依赖:** 无
 **步骤:**
 1. 新增常量:
@@ -297,7 +297,7 @@ Pane 后端用 pane_id,in-process 用 agent_id;Protocol 统一传两者,各自�
 
 **验证:** 单测覆盖 `teammate=True / False`,断言 TaskCreate 等可见性
 
-## T18: spawn_teammate 主流程 — `src/mewcode/team/spawn.py`**文件:** `src/mewcode/team/spawn.py`
+## T18: spawn_teammate 主流程 — `src/cccode/team/spawn.py`**文件:** `src/cccode/team/spawn.py`
 **依赖:** T1-T17
 **步骤:**
 1. 定义 `async Manager.spawn_teammate(req: TeamSpawnRequest) -> str`
@@ -305,7 +305,7 @@ Pane 后端用 pane_id,in-process 用 agent_id;Protocol 统一传两者,各自�
    - 取 Team
    - 校验调用者权限(看 ctx 是否有 TeammateContext,且 backend_type=in-process 时拒绝)
    - 解析 `SubAgentDefinition`
-   - `await wt_mgr.create(f".mewcode/worktrees/team-{sanitized}+{member}")`
+   - `await wt_mgr.create(f".cccode/worktrees/team-{sanitized}+{member}")`
    - 申请 session_dir(本期复用 ch12 格式,自己生成新 id)
    - 预生成 agent_id(`f"agent-{secrets.token_hex(7)}"`),构造 SpawnRequest 含 agent_id 字段
    - 计算 allowed = `apply_agent_tool_filter(FilterParams(teammate=True, ...))`、system_prompt = `def.system_prompt + team_system_prompt_suffix()`
@@ -320,7 +320,7 @@ Pane 后端用 pane_id,in-process 用 agent_id;Protocol 统一传两者,各自�
 
 **验证:** 单测覆盖 in-process 后端的 spawn 全流程;Pane 后端的 spawn 用 mock backend
 
-## T19: Agent 工具集成 — `src/mewcode/agent/agent_tool.py` 修改**文件:** `src/mewcode/agent/agent_tool.py`(修改)
+## T19: Agent 工具集成 — `src/cccode/agent/agent_tool.py` 修改**文件:** `src/cccode/agent/agent_tool.py`(修改)
 **依赖:** T16, T18
 **步骤:**
 1. `AgentToolArgs` dataclass 加 `team_name: str = ""`
@@ -336,10 +336,10 @@ Pane 后端用 pane_id,in-process 用 agent_id;Protocol 统一传两者,各自�
 
 **验证:** 单测:不带 team_name 走 ch13 老路径;带 team_name 调 mock team_hook,断言 spawn_teammate 被调
 
-## T20: 队员 Loop incoming-messages 注入 — `src/mewcode/agent/team_mailbox.py`**文件:** `src/mewcode/agent/team_mailbox.py`
+## T20: 队员 Loop incoming-messages 注入 — `src/cccode/agent/team_mailbox.py`**文件:** `src/cccode/agent/team_mailbox.py`
 **依赖:** T16, T6
 **步骤:**
-1. 在 `agent.Agent.run` / `run_to_completion` 的迭代头部(调 LLM 前),检查 ctx 中是否有 TeammateContext;实现位于 `mewcode.agent.team_mailbox.ingest_team_mailbox`
+1. 在 `agent.Agent.run` / `run_to_completion` 的迭代头部(调 LLM 前),检查 ctx 中是否有 TeammateContext;实现位于 `cccode.agent.team_mailbox.ingest_team_mailbox`
 2. 若有,调 `await tc.read_unread()`
 3. 若有未读消息,构造 `<incoming-messages>` reminder 字符串(F42),加到 `runtime.pending_reminders`(下一轮 `build_reminder` 取出)
 4. 调 `await tc.mark_read(indices)`
@@ -360,7 +360,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 单测覆盖:fake mailbox 写入 1 条消息,启动子 Agent.run,断言 reminder 含 `<incoming-messages>`
 
-## T21: task.Manager 改造 — `src/mewcode/task/manager.py` 修改**文件:** `src/mewcode/task/manager.py`(修改)
+## T21: task.Manager 改造 — `src/cccode/task/manager.py` 修改**文件:** `src/cccode/task/manager.py`(修改)
 **依赖:** T7
 **步骤:**
 1. `Manager` 持一个 `name_reg: AgentNameRegistry | None` 引用(可选 None 兜底)
@@ -373,7 +373,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 单测:注册 `on_task_done`,`launch` 一个 noop task,等完成,断言回调被触发
 
-## T22: 协作工具实现 — `src/mewcode/team/tools/`**文件:** `team_create.py` / `team_delete.py` / `task_create.py` / `task_get.py` / `task_list.py` / `task_update.py` / `send_message.py`
+## T22: 协作工具实现 — `src/cccode/team/tools/`**文件:** `team_create.py` / `team_delete.py` / `task_create.py` / `task_get.py` / `task_list.py` / `task_update.py` / `send_message.py`
 **依赖:** T3, T6, T7, T8
 **步骤:**
 1. 每个工具实现 `tool.Tool` Protocol(`name`/`description`/`parameters`/`read_only`/`execute`)
@@ -397,17 +397,17 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 测试通过
 
-## T24: coordinator 包 — `src/mewcode/coordinator/__init__.py`**文件:** `src/mewcode/coordinator/__init__.py`
+## T24: coordinator 包 — `src/cccode/coordinator/__init__.py`**文件:** `src/cccode/coordinator/__init__.py`
 **依赖:** 无
 **步骤:**
-1. 实现 `def is_enabled(cfg: Config) -> bool`——`cfg.features.coordinator_mode and env_truthy(os.environ.get("MEWCODE_COORDINATOR_MODE", ""))`
+1. 实现 `def is_enabled(cfg: Config) -> bool`——`cfg.features.coordinator_mode and env_truthy(os.environ.get("CCCODE_COORDINATOR_MODE", ""))`
 2. 实现 `def allowed_tools() -> list[str]`(F53)
 3. 实现 `def system_prompt_suffix() -> str`(F55)——除四阶段框架外,**必须**包含"派完队员就停手等汇报"的纪律段:派出 Agent/SendMessage 后禁止立刻 read_file/glob/grep/bash 自己探索;禁止 sleep/TaskList 凑时间;只在 Research 首次定位 / Synthesis 读队员产出 / Verification 收敛 时才允许自己用读类工具
 4. 实现 `def env_truthy(v: str) -> bool`——`v.lower() in {"1", "true", "yes"}`
 
 **验证:** 单测覆盖双锁的 4 种组合(00/01/10/11),只有 11 返回 True;tmux 实跑观察 Lead 派完队员后不立刻 glob/read_file 而是"等待汇报"
 
-## T25: config 加 features — `src/mewcode/config/__init__.py` 修改**文件:** `src/mewcode/config/__init__.py`(修改)
+## T25: config 加 features — `src/cccode/config/__init__.py` 修改**文件:** `src/cccode/config/__init__.py`(修改)
 **依赖:** 无
 **步骤:**
 1. 加 `@dataclass class FeaturesConfig`,字段 `coordinator_mode: bool = False` + `fork_teammate: bool = False`
@@ -416,18 +416,18 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 单测加载 yaml 含 `features:` 段,断言字段被读出
 
-## T26: TUI 集成 — `src/mewcode/tui/app.py` 修改**文件:** `src/mewcode/tui/app.py` 与可能的 view 文件(修改)
+## T26: TUI 集成 — `src/cccode/tui/app.py` 修改**文件:** `src/cccode/tui/app.py` 与可能的 view 文件(修改)
 **依赖:** T3, T24
 **步骤:**
-1. `MewCodeApp.__init__` 加 `team_mgr: team.Manager`、`coordinator_mode: bool = False`
-2. `MewCodeApp` 加字段 `coordinator_mode: bool` 与 `lead_mail_event: asyncio.Event`;`__init__` 时 `lead_mail_event = asyncio.Event()`
-3. coordinator 应用迁到 `src/mewcode/cli/__init__.py` 中的 main_agent 上(`set_allowed_tools` + `append_system_prompt`)——tui 自身只负责状态栏渲染
-4. 状态栏渲染时若 `app.coordinator_mode is True` 在 mode label 后追加 ` [COORDINATOR]`(参见 `src/mewcode/tui/view.py status_bar()`)
+1. `CcCodeApp.__init__` 加 `team_mgr: team.Manager`、`coordinator_mode: bool = False`
+2. `CcCodeApp` 加字段 `coordinator_mode: bool` 与 `lead_mail_event: asyncio.Event`;`__init__` 时 `lead_mail_event = asyncio.Event()`
+3. coordinator 应用迁到 `src/cccode/cli/__init__.py` 中的 main_agent 上(`set_allowed_tools` + `append_system_prompt`)——tui 自身只负责状态栏渲染
+4. 状态栏渲染时若 `app.coordinator_mode is True` 在 mode label 后追加 ` [COORDINATOR]`(参见 `src/cccode/tui/view.py status_bar()`)
 5. config 字段名是 **snake_case**:`features.coordinator_mode`
 
-**验证:** 在 config.yaml 加 `features:\n  coordinator_mode: true`,启动时设环境变量 `MEWCODE_COORDINATOR_MODE=1`,观察状态栏出现 `[COORDINATOR]`
+**验证:** 在 config.yaml 加 `features:\n  coordinator_mode: true`,启动时设环境变量 `CCCODE_COORDINATOR_MODE=1`,观察状态栏出现 `[COORDINATOR]`
 
-## T27: /team slash 命令 — `src/mewcode/command/builtin_team.py`**文件:** `src/mewcode/command/builtin_team.py`
+## T27: /team slash 命令 — `src/cccode/command/builtin_team.py`**文件:** `src/cccode/command/builtin_team.py`
 **依赖:** T3
 **步骤:**
 1. 注册 4 个本地命令(`Kind.LOCAL`):
@@ -439,7 +439,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** `/team list` 在 TUI 输出含已创建 Team
 
-## T28: cli wire — `src/mewcode/cli/__init__.py` 修改**文件:** `src/mewcode/cli/__init__.py`(修改)
+## T28: cli wire — `src/cccode/cli/__init__.py` 修改**文件:** `src/cccode/cli/__init__.py`(修改)
 **依赖:** T1-T27
 **步骤:**
 1. 构造 `name_reg = AgentNameRegistry()`
@@ -447,13 +447,13 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 3. 构造 `team_mgr = team.Manager(home, root, worktree_mgr, task_mgr, name_reg)`
 4. 注册 7 个新工具到 registry(TeamCreate/TeamDelete/TaskCreate/TaskGet/TaskList/TaskUpdate/SendMessage)
 5. `agent_tool = AgentTool(..., team_hook=team_mgr)`(把 team_mgr 作为 TeamHook 注入)
-6. 构造 `MewCodeApp(..., team_mgr=team_mgr, coordinator_mode=coordinator.is_enabled(cfg))`
+6. 构造 `CcCodeApp(..., team_mgr=team_mgr, coordinator_mode=coordinator.is_enabled(cfg))`
 7. 若 `--team-member` flag 出现:**所有依赖 wire 完成后**直接调 `await run_team_member(team_member_args)` 并 `return`,**不**构造 TUI(F19a);否则继续走 TUI 路径
 8. Lead 启动时(TUI 路径)若 `coordinator.is_enabled(cfg)`:`main_agent.set_allowed_tools(coordinator.allowed_tools())` + `main_agent.append_system_prompt(coordinator.system_prompt_suffix())`
 
-**验证:** `python -m mewcode` 主流程能启动 TUI;`ruff check src/mewcode/cli/` 通过
+**验证:** `python -m cccode` 主流程能启动 TUI;`ruff check src/cccode/cli/` 通过
 
-## T29: --team-member 自治循环 — `src/mewcode/cli/team_member.py`(新文件)**文件:** `src/mewcode/cli/team_member.py`(新建)
+## T29: --team-member 自治循环 — `src/cccode/cli/team_member.py`(新文件)**文件:** `src/cccode/cli/team_member.py`(新建)
 **依赖:** T28
 **步骤:**
 1. 解析新增 CLI flags:`--team-member` / `--team` / `--member` / `--agent-id` / `--session-dir` / `--worktree` / `--agent-type` / `--model` / `--plan-mode`(用 `argparse` 或 `click`)
@@ -471,7 +471,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 见 AC28 步骤 4 端到端实跑——alice pane 内显示 task 执行流,`/tmp/test_alice.txt` 落地,SendMessage 后 alice 能续派
 
-## T30: 队员空闲通知 hook 注入**文件:** `src/mewcode/cli/__init__.py`(修改)+ `src/mewcode/team/manager.py`(加 helper)
+## T30: 队员空闲通知 hook 注入**文件:** `src/cccode/cli/__init__.py`(修改)+ `src/cccode/team/manager.py`(加 helper)
 **依赖:** T21, T3
 **步骤:**
 1. 在 `cli/__init__.py` wire 后,注册 `on_task_done` 回调到 `task_mgr`:
@@ -488,11 +488,11 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 集成测试:in-process 后端 spawn 队员 → 自然结束 → 断言 Team.config 中 `is_active=False`、Lead mailbox 有 idle 消息
 
-## T30b: Lead mailbox 轮询 + 自动唤醒 — `src/mewcode/team/manager.py` + `src/mewcode/tui/tasks.py` + `src/mewcode/tui/app.py` + `src/mewcode/tui/stream.py`**文件:**
-- `src/mewcode/team/manager.py`(增加 `poll_lead_mailboxes` + `LeadMessage`)
-- `src/mewcode/tui/tasks.py`(增加 `consume_lead_mail` / `wait_for_lead_mail` / `build_team_update_reminder` / `lead_mail_message`)
-- `src/mewcode/tui/app.py`(`on_mount` 启动 watcher;`on_message` 处理 `LeadMailMessage`)
-- `src/mewcode/tui/stream.py`(增加 `begin_autonomous_turn`)
+## T30b: Lead mailbox 轮询 + 自动唤醒 — `src/cccode/team/manager.py` + `src/cccode/tui/tasks.py` + `src/cccode/tui/app.py` + `src/cccode/tui/stream.py`**文件:**
+- `src/cccode/team/manager.py`(增加 `poll_lead_mailboxes` + `LeadMessage`)
+- `src/cccode/tui/tasks.py`(增加 `consume_lead_mail` / `wait_for_lead_mail` / `build_team_update_reminder` / `lead_mail_message`)
+- `src/cccode/tui/app.py`(`on_mount` 启动 watcher;`on_message` 处理 `LeadMailMessage`)
+- `src/cccode/tui/stream.py`(增加 `begin_autonomous_turn`)
 **依赖:** T28(cli 已 wire team_mgr 进 TUI 参数)
 **步骤:**
 1. `team.Manager.poll_lead_mailboxes()`:遍历 `m.list_()`,对每个 Team 用 `Box(t.mailbox_dir).read_unread(t.lead_agent_id)` 读未读,标 read,返回 `list[LeadMessage(team_name, from_, type, summary, content, time)]`
@@ -507,7 +507,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** tmux 实跑——Lead 派 alice + bob;30 秒内队员 run_to_completion idle 后 mailbox.unread 1 秒内归零(watcher 消费);若 Lead 当时空闲,屏幕上自动出现 `● [team-update] 队员发来新消息...` 用户文本块 + Lead 紧接着的 Synthesis 回复——内容包含队员报告里的真实文件名(如 `agent.py`、`team_mailbox.py`),证明完整 content 通过 reminder 传到 Lead 视野
 
-## T31: 续写检测 — `src/mewcode/team/tools/send_message.py`**文件:** `src/mewcode/team/tools/send_message.py`(同 T22)
+## T31: 续写检测 — `src/cccode/team/tools/send_message.py`**文件:** `src/cccode/team/tools/send_message.py`(同 T22)
 **依赖:** T22, T21
 **步骤:**
 1. `SendMessage.execute` 写完邮箱后:
@@ -520,7 +520,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 
 **验证:** 单测:先 spawn → 等结束 → SendMessage → 断言 task 重新 Running
 
-## T32: Plan 审批权限切换 — `src/mewcode/agent/team_mailbox.py`**文件:** `src/mewcode/agent/team_mailbox.py`(修改)
+## T32: Plan 审批权限切换 — `src/cccode/agent/team_mailbox.py`**文件:** `src/cccode/agent/team_mailbox.py`(修改)
 **依赖:** T20
 **步骤:**
 1. 在 incoming-messages 注入逻辑中:若有 `plan_approval_response(approve=True)` 消息:
@@ -535,24 +535,24 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 1. 跑 `pytest`,补失败用例
 2. 跑 `ruff check src/`,修警告
 3. 跑 `ruff format --check src/` 看无未格式化文件
-4. 可选:`mypy src/mewcode/team/` 全绿
+4. 可选:`mypy src/cccode/team/` 全绿
 
 **验证:** 全绿
 
 ## T34: tmux 实跑端到端验证**依赖:** T1-T33
 **步骤:**
 1. 启动 tmux:`tmux new-session -s ch15-test`
-2. 在内层跑 `cd /path/to/mewcode && uv run python -m mewcode`(或 `mewcode` 装好的入口)
+2. 在内层跑 `cd /path/to/cccode && uv run python -m cccode`(或 `cccode` 装好的入口)
 3. 在 TUI 输入:「创建一个名为 demo 的团队」
 4. 观察:
    - Agent 调 TeamCreate
-   - `~/.mewcode/teams/demo/config.json` 落地
+   - `~/.cccode/teams/demo/config.json` 落地
    - 状态栏 / 输出确认成功
 5. 在 TUI 输入:「派 alice 用 general-purpose,在 worktree 里 echo hello > /tmp/test_alice.txt」
 6. 观察:
    - tmux split 出新 pane
-   - alice pane 内 mewcode 子实例启动
-   - `.mewcode/worktrees/team-demo+alice/` 创建
+   - alice pane 内 cccode 子实例启动
+   - `.cccode/worktrees/team-demo+alice/` 创建
    - `/tmp/test_alice.txt` 文件内容为 `hello`
 7. 在 TUI 输入:`/team info demo`,确认 alice 出现
 8. 在 TUI 输入:「给 alice 发消息,让她再写一行 world」(Agent 调 SendMessage)
@@ -564,7 +564,7 @@ import 还是会成环——把 Message 类型也抽象成 Protocol 或 `dict[st
 ## T35: in-process 实跑端到端验证**依赖:** T1-T33
 **步骤:**
 1. `unset TMUX TERM_PROGRAM`
-2. `cd /path/to/mewcode && uv run python -m mewcode`
+2. `cd /path/to/cccode && uv run python -m cccode`
 3. Agent 调 TeamCreate("inproc") → backend 为 in-process
 4. Agent 派 bob(后端 in-process)
 5. bob 在同进程跑完

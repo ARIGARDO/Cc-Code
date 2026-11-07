@@ -6,7 +6,7 @@ Agent 主流程在工具调用前后、session 起止、turn 起止、消息收�
 
 ## 2. 目标
 
-交付 `mewcode.hooks.HookEngine`，从 `config.yaml` 的 `hooks` 数组加载并经 `load_hooks` 校验后注入引擎；提供两类入口：普通事件用 `run_hooks(event, ctx)` 跑全部命中钩子；`pre_tool_use` 用 `run_pre_tool_hooks(ctx)` 允许阻断工具调用并返回 `ToolRejectedError`。Condition 支持 leaf 操作符（`==` / `!=` / `=~` / `~=`）+ 复合（`&&` / `||`，但同一表达式不允许混用）+ 变量覆盖 tool / event / `args.<key>`。`Agent.run` 在 session 入口、turn 入口、每次工具调用前后、消息收发前后接入对应入口；`MewCodeApp` 负责从配置初始化引擎并挂到 Agent，并在 mount / unmount 时触发 startup / shutdown 事件。
+交付 `cccode.hooks.HookEngine`，从 `config.yaml` 的 `hooks` 数组加载并经 `load_hooks` 校验后注入引擎；提供两类入口：普通事件用 `run_hooks(event, ctx)` 跑全部命中钩子；`pre_tool_use` 用 `run_pre_tool_hooks(ctx)` 允许阻断工具调用并返回 `ToolRejectedError`。Condition 支持 leaf 操作符（`==` / `!=` / `=~` / `~=`）+ 复合（`&&` / `||`，但同一表达式不允许混用）+ 变量覆盖 tool / event / `args.<key>`。`Agent.run` 在 session 入口、turn 入口、每次工具调用前后、消息收发前后接入对应入口；`CcCodeApp` 负责从配置初始化引擎并挂到 Agent，并在 mount / unmount 时触发 startup / shutdown 事件。
 
 ## 3. 功能需求
 
@@ -63,16 +63,16 @@ Agent 主流程在工具调用前后、session 起止、turn 起止、消息收�
   - `HookConfigError`（Exception）：loader 报错
   - `ConditionParseError`（Exception）：condition 解析报错
 - 主流程：
-  1. `mewcode/__main__.py:main` 启动 → `load_config` 读 `config.yaml` 拿到 `raw_hooks`（dict 列表）
+  1. `cccode/__main__.py:main` 启动 → `load_config` 读 `config.yaml` 拿到 `raw_hooks`（dict 列表）
   2. `load_hooks(raw_hooks)` 校验 + 解析成 `list[Hook]`；`HookConfigError` 时打 stderr 并 `sys.exit(1)`
-  3. `HookEngine(hooks)` 构造 → 传入 `MewCodeApp(..., hook_engine=...)` → `Agent(..., hook_engine=...)`
+  3. `HookEngine(hooks)` 构造 → 传入 `CcCodeApp(..., hook_engine=...)` → `Agent(..., hook_engine=...)`
   4. App `on_mount` 派发 `startup` 事件；`on_unmount` 派发 `shutdown` 事件
   5. `Agent.run` 入口派发 `session_start` → 每轮 `turn_start` → stream 前 `pre_send` → stream 后 `post_receive` → 退出循环时派发 `turn_end` + `session_end`
   6. 工具调用前调 `run_pre_tool_hooks(ctx)`：返回 `ToolRejectedError` 时打包成 `ToolResult(output=f"Hook rejected: {reason}", is_error=True)`，跳过实际 tool 执行
   7. 工具调用后调 `run_hooks("post_tool_use", ctx)`
   8. 每轮 hook 执行完后调 `_drain_hook_events()`，把 `HookNotification` 转成 `HookEvent` 事件流 yield 给 TUI 展示
 - 调用链（模块层级）：
-  - 启动：`mewcode/__main__.py` → `load_hooks` → `HookEngine` → `MewCodeApp` → `Agent`
+  - 启动：`cccode/__main__.py` → `load_hooks` → `HookEngine` → `CcCodeApp` → `Agent`
   - 触发：`Agent.run` → `_build_hook_context` → `hook_engine.run_hooks` / `run_pre_tool_hooks` → `execute_action` → `_EXECUTOR_MAP[type]`
 - 与其他模块的交互：
   - 上行依赖：`agent.py`（loop 触发）、`app.py`（startup/shutdown）、`config.py`（raw_hooks 字段）、`__main__.py`（装配入口）

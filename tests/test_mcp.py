@@ -7,18 +7,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mewcode.config import (
+from cccode.config import (
     ConfigError,
     MCPServerConfig,
     build_child_env,
     load_config,
     resolve_env_vars,
 )
-from mewcode.mcp.client import MCPClient
-from mewcode.mcp.manager import MCPManager
-from mewcode.mcp.tool_wrapper import MCPToolWrapper, _build_params_model, _extract_text
-from mewcode.tools import ToolRegistry
-from mewcode.tools.base import ToolResult
+from cccode.mcp.client import MCPClient
+from cccode.mcp.manager import MCPManager
+from cccode.mcp.tool_wrapper import MCPToolWrapper, _build_params_model, _extract_text
+from cccode.tools import ToolRegistry
+from cccode.tools.base import ToolResult
 
 
 # ──────────────────────────────────────────────
@@ -303,7 +303,7 @@ class TestBuildParamsModel:
         assert "limit" in fields
 
     def test_type_mapping(self) -> None:
-        from mewcode.mcp.tool_wrapper import _json_type_to_python
+        from cccode.mcp.tool_wrapper import _json_type_to_python
         assert _json_type_to_python("string") is str
         assert _json_type_to_python("integer") is int
         assert _json_type_to_python("number") is float

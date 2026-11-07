@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from mewcode.conversation import ConversationManager, ToolResultBlock
-from mewcode.context.manager import (
+from cccode.conversation import ConversationManager, ToolResultBlock
+from cccode.context.manager import (
     PERSISTED_TAG,
     SESSION_SUBDIR,
     SINGLE_RESULT_CHAR_LIMIT,

@@ -10,18 +10,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mewcode.skills.parser import (
+from cccode.skills.parser import (
     SkillParseError,
     parse_frontmatter,
     parse_skill_file,
     substitute_arguments,
     _validate_meta,
 )
-from mewcode.skills.executor import (
+from cccode.skills.executor import (
     SkillDependencyError,
     filter_tool_registry,
 )
-from mewcode.skills.directory import (
+from cccode.skills.directory import (
     parse_tool_json,
     register_skill_tools,
     _DynamicParams,
@@ -147,7 +147,7 @@ class TestSubstituteArguments:
 
 class TestSkillLoader:
     def test_builtin_loading(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         skills = loader.load_all()
         assert "commit" in skills
@@ -156,9 +156,9 @@ class TestSkillLoader:
         assert "backend-interview" in skills
 
     def test_project_overrides_builtin(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         with tempfile.TemporaryDirectory() as tmpdir:
-            skill_dir = Path(tmpdir) / ".mewcode" / "skills"
+            skill_dir = Path(tmpdir) / ".cccode" / "skills"
             skill_dir.mkdir(parents=True)
             _write_skill(
                 skill_dir / "commit.md",
@@ -169,7 +169,7 @@ class TestSkillLoader:
             assert skills["commit"].description == "Custom commit"
 
     def test_catalog(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         catalog = loader.get_catalog()
@@ -178,7 +178,7 @@ class TestSkillLoader:
         assert "review" in names
 
     def test_get(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         skill = loader.get("commit")
@@ -186,15 +186,15 @@ class TestSkillLoader:
         assert skill.name == "commit"
 
     def test_get_unknown(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         assert loader.get("nonexistent") is None
 
     def test_hot_reload_success(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         with tempfile.TemporaryDirectory() as tmpdir:
-            skill_dir = Path(tmpdir) / ".mewcode" / "skills"
+            skill_dir = Path(tmpdir) / ".cccode" / "skills"
             skill_dir.mkdir(parents=True)
             path = _write_skill(
                 skill_dir / "hot.md",
@@ -207,9 +207,9 @@ class TestSkillLoader:
             assert loader.get("hot").description == "v2"
 
     def test_hot_reload_failure_fallback(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         with tempfile.TemporaryDirectory() as tmpdir:
-            skill_dir = Path(tmpdir) / ".mewcode" / "skills"
+            skill_dir = Path(tmpdir) / ".cccode" / "skills"
             skill_dir.mkdir(parents=True)
             path = _write_skill(
                 skill_dir / "hotfail.md",
@@ -223,7 +223,7 @@ class TestSkillLoader:
             assert skill.description == "v1"
 
     def test_directory_skill(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         skill = loader.get("backend-interview")
@@ -231,16 +231,16 @@ class TestSkillLoader:
         assert skill.is_directory is True
 
     def test_source_label(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         assert loader.get_source_label("commit") == "builtin"
         assert loader.get_source_label("nonexistent") == "unknown"
 
     def test_failed_file_skipped(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         with tempfile.TemporaryDirectory() as tmpdir:
-            skill_dir = Path(tmpdir) / ".mewcode" / "skills"
+            skill_dir = Path(tmpdir) / ".cccode" / "skills"
             skill_dir.mkdir(parents=True)
             _write_skill(skill_dir / "bad.md", "NOT VALID FRONTMATTER")
             _write_skill(
@@ -253,7 +253,7 @@ class TestSkillLoader:
             assert "bad" not in skills
 
     def test_reload(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         skills = loader.reload()
@@ -264,8 +264,8 @@ class TestSkillLoader:
 
 class TestFilterToolRegistry:
     def _make_registry(self) -> Any:
-        from mewcode.tools import ToolRegistry
-        from mewcode.tools.base import Tool, ToolResult
+        from cccode.tools import ToolRegistry
+        from cccode.tools.base import Tool, ToolResult
 
         class FakeTool(Tool):
             name: str = ""
@@ -329,7 +329,7 @@ class TestDirectory:
             assert len(result) == 1
 
     def test_register_skill_tools(self):
-        from mewcode.tools import ToolRegistry
+        from cccode.tools import ToolRegistry
         with tempfile.TemporaryDirectory() as tmpdir:
             skill_dir = Path(tmpdir)
             (skill_dir / "tool.json").write_text(json.dumps({
@@ -346,14 +346,14 @@ class TestDirectory:
             assert "mytool" in reg.list_tools()
 
     def test_no_tool_json(self):
-        from mewcode.tools import ToolRegistry
+        from cccode.tools import ToolRegistry
         with tempfile.TemporaryDirectory() as tmpdir:
             reg = ToolRegistry()
             count = register_skill_tools(Path(tmpdir), reg)
             assert count == 0
 
     def test_dynamic_tool_executable(self):
-        from mewcode.tools import ToolRegistry
+        from cccode.tools import ToolRegistry
         with tempfile.TemporaryDirectory() as tmpdir:
             skill_dir = Path(tmpdir)
             (skill_dir / "tool.json").write_text(json.dumps({
@@ -379,8 +379,8 @@ class TestDirectory:
 
 class TestLoadSkill:
     def test_load_existing(self):
-        from mewcode.tools.load_skill import LoadSkill
-        from mewcode.skills.loader import SkillLoader
+        from cccode.tools.load_skill import LoadSkill
+        from cccode.skills.loader import SkillLoader
         tool = LoadSkill()
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
@@ -395,8 +395,8 @@ class TestLoadSkill:
         assert not result.is_error
 
     def test_load_unknown(self):
-        from mewcode.tools.load_skill import LoadSkill
-        from mewcode.skills.loader import SkillLoader
+        from cccode.tools.load_skill import LoadSkill
+        from cccode.skills.loader import SkillLoader
         tool = LoadSkill()
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
@@ -410,7 +410,7 @@ class TestLoadSkill:
         assert result.is_error
 
     def test_not_initialized(self):
-        from mewcode.tools.load_skill import LoadSkill
+        from cccode.tools.load_skill import LoadSkill
         tool = LoadSkill()
         import asyncio
         params = MagicMock()
@@ -419,7 +419,7 @@ class TestLoadSkill:
         assert result.is_error
 
     def test_is_system_tool_and_category(self):
-        from mewcode.tools.load_skill import LoadSkill
+        from cccode.tools.load_skill import LoadSkill
         tool = LoadSkill()
         assert tool.is_system_tool is True
         assert tool.category == "read"
@@ -429,7 +429,7 @@ class TestLoadSkill:
 
 class TestAgentIntegration:
     def test_build_environment_context_with_active_skills(self):
-        from mewcode.prompts import build_environment_context
+        from cccode.prompts import build_environment_context
         result = build_environment_context(
             work_dir="/tmp",
             active_skills={"commit": "SOP body here"},
@@ -439,12 +439,12 @@ class TestAgentIntegration:
         assert "SOP body here" in result
 
     def test_build_environment_context_without_active_skills(self):
-        from mewcode.prompts import build_environment_context
+        from cccode.prompts import build_environment_context
         result = build_environment_context(work_dir="/tmp")
         assert "## Active Skills" not in result
 
     def test_activate_skill(self):
-        from mewcode.skills.loader import SkillLoader
+        from cccode.skills.loader import SkillLoader
         loader = SkillLoader("/tmp/nonexistent_workdir")
         loader.load_all()
         agent = MagicMock()

@@ -1,13 +1,13 @@
 # Agent Team Plan## 架构概览
 
-本章引入 `mewcode.team` 顶层包,把 ch13 SubAgent 的「子 Agent」扩展为「Team 队员」。整体分四层:
+本章引入 `cccode.team` 顶层包,把 ch13 SubAgent 的「子 Agent」扩展为「Team 队员」。整体分四层:
 
 1. **数据模型层**(`team/types.py` + `team/manager.py` + `team/persistence.py`)——Team、TeammateInfo 数据结构与持久化
 2. **后端层**(`team/backend/`)——`Backend` Protocol 与三种实现 tmux / iterm2 / inprocess,屏蔽 spawn 差异
 3. **协作层**(`team/mailbox/`、`team/registry/`、`team/tasks/`)——邮箱(含文件锁)、AgentNameRegistry、共享任务列表
 4. **工具与集成层**(`team/tools/` + `agent` 包扩展 + `coordinator` 包)——5 个协作工具 + `Agent` 工具的 `team_name` 分支 + Coordinator Mode
 
-Lead 仍是 `tui.MewCodeApp.main_agent`——本期 Lead 没有独立类型,通过 `coordinator.is_enabled()` 在启动时收窄其工具集即可。
+Lead 仍是 `tui.CcCodeApp.main_agent`——本期 Lead 没有独立类型,通过 `coordinator.is_enabled()` 在启动时收窄其工具集即可。
 
 依赖方向(单向):
 ```
@@ -209,7 +209,7 @@ class Store:
 ### `coordinator` 包
 
 ```python
-# src/mewcode/coordinator/__init__.py
+# src/cccode/coordinator/__init__.py
 def is_enabled(cfg) -> bool: ...
 def allowed_tools() -> list[str]: ...
 def system_prompt_suffix() -> str: ...
@@ -217,11 +217,11 @@ def system_prompt_suffix() -> str: ...
 
 仅 3 个纯函数,无状态。
 
-## 模块设计### `mewcode.team`(顶层)**职责:** Team / TeammateInfo / Manager 数据结构与持久化,跨子包的协调入口。
+## 模块设计### `cccode.team`(顶层)**职责:** Team / TeammateInfo / Manager 数据结构与持久化,跨子包的协调入口。
 **对外接口:** `Manager(...)`、`Manager.create/get/delete`、`Team.add_member/set_member_active/remove_member`
 **依赖:** `worktree`、`task`、`session`、`team.backend`、`team.mailbox`、`team.registry`、`team.tasks`
 
-### `mewcode.team.backend`**职责:** 屏蔽 tmux / iterm2 / in-process spawn 差异。
+### `cccode.team.backend`**职责:** 屏蔽 tmux / iterm2 / in-process spawn 差异。
 **对外接口:** `Backend` Protocol、`detect() -> BackendType`、`new_backend(t: BackendType, **deps) -> Backend`
 **依赖:** `team`(取常量)、`agent` 与 `task`(in-process 实现用)
 
@@ -229,23 +229,23 @@ def system_prompt_suffix() -> str: ...
 
 **采用方案:** 三种后端各一个子模块(`tmux.py` / `iterm2.py` / `inprocess.py`),每个独立实现 `Backend` Protocol,工厂函数 `new_backend(...)` 接收所需依赖。`inprocess` 子模块依赖 `agent` 包没问题(`agent` 在更低层)。
 
-### `mewcode.team.mailbox`**职责:** 邮箱文件 + 文件锁的读写。
+### `cccode.team.mailbox`**职责:** 邮箱文件 + 文件锁的读写。
 **对外接口:** `Box.write/read/mark_read`、`Message` 类型
 **依赖:** 仅 stdlib(`os`、`json`、`asyncio`、`pathlib`)
 
-### `mewcode.team.registry`**职责:** Agent name ↔ agent_id 双向映射。
+### `cccode.team.registry`**职责:** Agent name ↔ agent_id 双向映射。
 **对外接口:** `register/unregister/resolve/name_of`
 **依赖:** 仅 stdlib
 
-### `mewcode.team.tasks`**职责:** 共享任务列表的 CRUD + 依赖图维护。
+### `cccode.team.tasks`**职责:** 共享任务列表的 CRUD + 依赖图维护。
 **对外接口:** `Store.create/get/list_/update`、`Task`、`Filter`、`Patch` 类型
 **依赖:** 仅 stdlib
 
-### `mewcode.team.tools`**职责:** 5 个协作工具实现(TaskCreate、TaskGet、TaskList、TaskUpdate、SendMessage)+ 2 个 Team 管理工具(TeamCreate、TeamDelete)。
+### `cccode.team.tools`**职责:** 5 个协作工具实现(TaskCreate、TaskGet、TaskList、TaskUpdate、SendMessage)+ 2 个 Team 管理工具(TeamCreate、TeamDelete)。
 **对外接口:** 每个工具一个工厂函数 `new_xxx_tool(mgr: team.Manager) -> tool.Tool`
 **依赖:** `tool`、`team`、`team.{mailbox,registry,tasks}`
 
-### `mewcode.coordinator`**职责:** Coordinator Mode 的开关检测、工具白名单、系统提示词。
+### `cccode.coordinator`**职责:** Coordinator Mode 的开关检测、工具白名单、系统提示词。
 **对外接口:** `is_enabled() -> bool`、`allowed_tools() -> list[str]`、`system_prompt_suffix() -> str`
 **依赖:** `config`(读 feature flag)
 
@@ -270,8 +270,8 @@ def system_prompt_suffix() -> str: ...
 
 ### `tui` 包扩展
 
-- `MewCodeApp` 新增字段 `team_mgr: team.Manager`
-- 注入 `/team` 系列 slash 命令(`src/mewcode/command/builtin_team.py`)
+- `CcCodeApp` 新增字段 `team_mgr: team.Manager`
+- 注入 `/team` 系列 slash 命令(`src/cccode/command/builtin_team.py`)
 - 状态栏新增 `[COORDINATOR]` 标签(若 `coordinator.is_enabled()`)
 
 ## 模块交互### TeamCreate 调用路径
@@ -285,8 +285,8 @@ await team.Manager.create("demo", "")
   ↓
 1. sanitize("demo") → "demo"
 2. detect_backend() → "tmux"
-3. mkdir ~/.mewcode/teams/demo/
-4. mkdir ~/.mewcode/teams/demo/mailbox/
+3. mkdir ~/.cccode/teams/demo/
+4. mkdir ~/.cccode/teams/demo/mailbox/
 5. 写 config.json(原子)
 6. team.members = [TeammateInfo(name="lead", agent_id="lead", is_active=None)]
 7. teams["demo"] = team
@@ -394,7 +394,7 @@ TUI 渲染 statusbar 时检测 `coordinator_mode` 添加 `[COORDINATOR]` 标签�
 ## 文件组织
 
 ```
-src/mewcode/team/
+src/cccode/team/
 ├── __init__.py                    — 包导出
 ├── types.py                       — Team / TeammateInfo / BackendType 等类型
 ├── manager.py                     — Manager(create/get/delete/add_member/set_member_active/remove_member)
@@ -439,30 +439,30 @@ tests/
 ├── test_team_tools.py
 └── test_coordinator.py
 
-src/mewcode/coordinator/
+src/cccode/coordinator/
 └── __init__.py                    — is_enabled / allowed_tools / system_prompt_suffix
 
-src/mewcode/agent/
+src/cccode/agent/
 ├── agent_tool.py                  — 修改:增加 team_name 参数与 TeamHook 委托
 ├── team_hook.py                   — 新建:TeamHook Protocol、TeammateContext
 └── team_mailbox.py                — 新建:Loop 头部注入 incoming-messages reminder
 
-src/mewcode/task/
+src/cccode/task/
 └── manager.py                     — 修改:on_task_done 回调注册;改用 registry.AgentNameRegistry
 
-src/mewcode/command/
+src/cccode/command/
 └── builtin_team.py                — 新建:/team list/info/delete/kill 4 个命令
 
-src/mewcode/tui/
+src/cccode/tui/
 ├── app.py                         — 修改:接收 team_mgr;启动时检测 coordinator.is_enabled
 ├── tasks.py                       — 修改:consume_lead_mail / wait_for_lead_mail 后台 task
 ├── stream.py                      — 修改:begin_autonomous_turn
 └── view.py                        — 修改:渲染 [COORDINATOR] 标签
 
-src/mewcode/config/
+src/cccode/config/
 └── __init__.py                    — 修改:新增 FeaturesConfig.coordinator_mode / fork_teammate
 
-src/mewcode/cli/
+src/cccode/cli/
 ├── __init__.py                    — 修改:wire team.Manager,注册 7 个新工具,接入 coordinator
 └── team_member.py                 — 新建:--team-member 自治循环
 ```
@@ -471,11 +471,11 @@ src/mewcode/cli/
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
-| Team 包归属 | `mewcode.team` 顶层包 | 与 ch13 `subagent`、ch14 `worktree` 平级,职责清晰 |
+| Team 包归属 | `cccode.team` 顶层包 | 与 ch13 `subagent`、ch14 `worktree` 平级,职责清晰 |
 | 后端三选一时机 | `detect()` 在 `TeamCreate` 时一次性决定 | 与 README 一致:不做运行时回退,行为可预测 |
 | 后端实现拆分 | 各一个子模块 `tmux.py / iterm2.py / inprocess.py` | `inprocess` 需要依赖 `agent` 包,拆开避免污染其他 backend |
 | Backend Protocol | 三方法 `spawn/wake/kill` | 最小集;not pause/resume(本期不做) |
-| Lead 表示 | 不引入独立类型,Lead = `MewCodeApp.main_agent` | 收窄改动;Coordinator Mode 在工具集层面区分 |
+| Lead 表示 | 不引入独立类型,Lead = `CcCodeApp.main_agent` | 收窄改动;Coordinator Mode 在工具集层面区分 |
 | 邮箱实现 | `<team_config_dir>/mailbox/<agent_id>.json` + 同名 `.lock` | 跨进程通信现成方案;in-process 与 Pane 共用一套 |
 | 锁文件参数 | `os.open(O_CREAT\|O_EXCL\|O_WRONLY)`,5-100ms 抖动 10 次,>10s 视 stale | README 明定;避免雪崩;Python 没有 Go 的 `syscall.Flock` 跨平台等价,所以走 EEXIST 抢占 |
 | 任务存储 | `<team_config_dir>/tasks.json` 单文件 | Team 内任务量小(几十条),无需 DB;原子写 + 文件锁 |
@@ -483,7 +483,7 @@ src/mewcode/cli/
 | `task.Manager` 改造 | 加 `on_task_done` 回调,Team 注册 | 依赖反转,避免 task 包反向依赖 team |
 | Team 持久化原子性 | `<file>.tmp` + `os.replace` | 与 ch14 worktree session、ch12 session 一致;Python `os.replace` 跨平台原子 |
 | Worktree 命名 | `team-<sanitized_team>/<member>`(嵌套 slug,`/` → `+`) | 复用 ch14 嵌套 slug 能力;不污染顶层 worktree 命名空间 |
-| Member session_dir | 沿用 ch12 `<root>/.mewcode/sessions/<id>/` 格式 | 复用 `session.Writer`,无需新机制;Team 删除时一并清理 |
+| Member session_dir | 沿用 ch12 `<root>/.cccode/sessions/<id>/` 格式 | 复用 `session.Writer`,无需新机制;Team 删除时一并清理 |
 | Coordinator 开启检测 | `feature_has(cfg, "COORDINATOR_MODE") and env_truthy(env)` | README 明定双锁;一次决定不允许运行时改 |
 | Coordinator 工具白名单 | 硬编码常量,启动时直接 `set_allowed_tools` | LLM 无法解锁,安全边界清晰 |
 | Plan 审批本期形态 | 文本 Plan + Lead 用 `plan_approval_response` 回复 | 不强制结构化 Plan 类型,降低实现成本 |
@@ -496,4 +496,4 @@ src/mewcode/cli/
 | Team 删除时 Worktree 处理 | 调 `wt_mgr.remove(name, discard_changes=True)`,失败只警告 | 与 ch14 退出语义一致;`force=True` 才放行,无 force 时有活跃成员就拒删,有变更也保留(自动 cleanup 已处理) |
 | 错误命名 | 自定义异常类 `TeamHasActiveMembersError` / `InProcessTeammateNoSpawnError` 等 | 调用方可 `except` 判别 |
 | 并发模型 | `asyncio.Lock` 保护 Team / Manager 状态;mailbox 文件锁跨进程 | 与 Textual 的 asyncio event loop 天然契合;不引入 threading 池 |
-| 子进程模型 | `python -m mewcode --team-member` + `asyncio.create_subprocess_exec` | 标准 Python 启动方式,跨平台 |
+| 子进程模型 | `python -m cccode --team-member` + `asyncio.create_subprocess_exec` | 标准 Python 启动方式,跨平台 |

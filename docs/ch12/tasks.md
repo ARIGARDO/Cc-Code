@@ -1,13 +1,13 @@
 # ch12: Hook 系统 Tasks
 
 ## T1: 定义生命周期事件常量
-- 影响文件: `mewcode/hooks/events.py`
+- 影响文件: `cccode/hooks/events.py`
 - 依赖任务: 无
 - 完成标准: `LifecycleEvent` StrEnum 包含 15 个事件值（session_start / session_end / turn_start / turn_end / pre_tool_use / post_tool_use / pre_send / post_receive / startup / shutdown / error / compact / permission_request / file_change / command_execute）；可直接和字符串比较。
-- 实际产出: `mewcode/hooks/events.py:6-30`
+- 实际产出: `cccode/hooks/events.py:6-30`
 
 ## T2: 数据模型 —— Action / Hook / HookContext / ActionResult / ToolRejectedError
-- 影响文件: `mewcode/hooks/models.py`
+- 影响文件: `cccode/hooks/models.py`
 - 依赖任务: T1
 - 完成标准:
   - `Action`（dataclass）字段齐：type / command / message / url / method / body / headers / prompt / timeout（默认 30）
@@ -15,10 +15,10 @@
   - `HookContext`（dataclass）实现 `get_field("tool"/"event"/"args.<key>")` 与 `expand` 模板替换（$EVENT / $TOOL_NAME / $FILE_PATH / $MESSAGE / $ERROR / $TOOL_ARGS.<key>）
   - `ActionResult`（dataclass）含 output / success
   - `ToolRejectedError(Exception)` 带 tool / reason / hook_id 三字段
-- 实际产出: `mewcode/hooks/models.py:9-85`
+- 实际产出: `cccode/hooks/models.py:9-85`
 
 ## T3: Condition DSL —— leaf / 复合 / 解析
-- 影响文件: `mewcode/hooks/conditions.py`
+- 影响文件: `cccode/hooks/conditions.py`
 - 依赖任务: T2
 - 完成标准:
   - 支持四种 leaf 操作符：`==` / `!=` / `=~`（正则）/ `~=`（glob，走 `fnmatch.fnmatch`）
@@ -26,10 +26,10 @@
   - 支持 `&&` / `||` 复合，但同一表达式混用时 `parse_condition` 抛 `ConditionParseError("Cannot mix '&&' and '||'")`
   - 空表达式或纯空白返回 None
   - 字符串值带双引号时自动去除
-- 实际产出: `mewcode/hooks/conditions.py:12-96`（`Condition` / `ConditionGroup` / `parse_condition` / `_parse_single`）
+- 实际产出: `cccode/hooks/conditions.py:12-96`（`Condition` / `ConditionGroup` / `parse_condition` / `_parse_single`）
 
 ## T4: HookEngine 核心 —— find_matching_hooks / run_hooks / once / async_exec
-- 影响文件: `mewcode/hooks/engine.py`
+- 影响文件: `cccode/hooks/engine.py`
 - 依赖任务: T2, T3
 - 完成标准:
   - `HookEngine.__init__` 初始化 `hooks` / `_prompt_messages` / `_notifications` 三个状态
@@ -38,16 +38,16 @@
   - `_run_single` 把 `prompt` 类型成功结果写入 `_prompt_messages`，所有结果写 `_notifications`，异常被 catch
   - `get_prompt_messages()` 一次性返回并清空 `_prompt_messages`
   - `drain_notifications()` 一次性返回并清空 `_notifications`
-- 实际产出: `mewcode/hooks/engine.py:21-110`
+- 实际产出: `cccode/hooks/engine.py:21-110`
 
 ## T5: pre_tool_use 阻断专用入口
-- 影响文件: `mewcode/hooks/engine.py`
+- 影响文件: `cccode/hooks/engine.py`
 - 依赖任务: T4
 - 完成标准: `run_pre_tool_hooks(ctx) -> ToolRejectedError | None`：顺序执行命中 hook，遇到 `hook.reject=True` 立即返回 `ToolRejectedError(tool=ctx.tool_name, reason=result.output, hook_id=hook.id)`；不允许 reject 时返回 None；执行异常被捕获记 log 不抛出。
-- 实际产出: `mewcode/hooks/engine.py:80-103`
+- 实际产出: `cccode/hooks/engine.py:80-103`
 
 ## T6: 四种动作执行器（command / prompt / http / agent）
-- 影响文件: `mewcode/hooks/executors.py`
+- 影响文件: `cccode/hooks/executors.py`
 - 依赖任务: T2
 - 完成标准:
   - `execute_command`：`asyncio.create_subprocess_shell` + stderr 合并到 stdout，命令字符串先 `ctx.expand` 替换变量；`asyncio.wait_for(..., timeout=action.timeout)` 超时时 `proc.kill()` + `await proc.wait()` 并返回 `success=False, output="Command timed out after Xs: <cmd>"`
@@ -55,10 +55,10 @@
   - `execute_http`：默认 POST，`urlopen(req, timeout=30)` 走 `run_in_executor` 异步化；body 非空时自动加 `Content-Type: application/json`；响应体截断 500 字符
   - `execute_agent`：stub，返回 `ActionResult(output="agent executor not yet implemented", success=True)`
   - `execute_action` 通过 `_EXECUTOR_MAP` 派发；未知 type 返回 `success=False`
-- 实际产出: `mewcode/hooks/executors.py:13-97`
+- 实际产出: `cccode/hooks/executors.py:13-97`
 
 ## T7: 加载与校验 `load_hooks(raw_hooks)`
-- 影响文件: `mewcode/hooks/loader.py`
+- 影响文件: `cccode/hooks/loader.py`
 - 依赖任务: T1, T2, T3
 - 完成标准:
   - `load_hooks(None)` / `load_hooks([])` 返回 `[]`
@@ -71,13 +71,13 @@
   - hook id 缺失时按 `f"{event}_{i}"` 自动生成
   - condition 字符串经 `parse_condition` 解析失败时包成 `HookConfigError`
   - 错误消息含 hook id（无则用 `f"hook #{i+1}"`）
-- 实际产出: `mewcode/hooks/loader.py:7-115`
+- 实际产出: `cccode/hooks/loader.py:7-115`
 
 ## T8: 包出口与公共 API
-- 影响文件: `mewcode/hooks/__init__.py`
+- 影响文件: `cccode/hooks/__init__.py`
 - 依赖任务: T1-T7
-- 完成标准: `mewcode.hooks` 包对外暴露 `Action / ActionResult / Condition / ConditionGroup / ConditionParseError / Hook / HookConfigError / HookContext / HookEngine / LifecycleEvent / ToolRejectedError / load_hooks / parse_condition`；测试 `from mewcode.hooks import HookEngine` 能跑通。
-- 实际产出: `mewcode/hooks/__init__.py:1-27`
+- 完成标准: `cccode.hooks` 包对外暴露 `Action / ActionResult / Condition / ConditionGroup / ConditionParseError / Hook / HookConfigError / HookContext / HookEngine / LifecycleEvent / ToolRejectedError / load_hooks / parse_condition`；测试 `from cccode.hooks import HookEngine` 能跑通。
+- 实际产出: `cccode/hooks/__init__.py:1-27`
 
 ## T9: 单元测试覆盖
 - 影响文件: `tests/test_hooks.py`
@@ -99,33 +99,33 @@
 - 实际产出: `tests/test_hooks.py:1-510`（13 个测试类）
 
 ## T10: 接入主流程 —— config 绑定
-- 影响文件: `mewcode/config.py`
+- 影响文件: `cccode/config.py`
 - 依赖任务: T1
 - 完成标准: `AppConfig` dataclass 新增 `raw_hooks: list[dict]` 字段（保留原始 dict，由 loader 二次解析）；`load_config` 在 `validate_config_structure` 后填入 `raw_hooks=validated["hooks"]`。
-- 实际产出: `mewcode/config.py:93`（字段定义）、`mewcode/config.py:152`（赋值）
+- 实际产出: `cccode/config.py:93`（字段定义）、`cccode/config.py:152`（赋值）
 
 ## T11: 接入主流程 —— Agent + App 装配 + Agent loop 触发
-- 影响文件: `mewcode/__main__.py`、`mewcode/app.py`、`mewcode/agent.py`
+- 影响文件: `cccode/__main__.py`、`cccode/app.py`、`cccode/agent.py`
 - 依赖任务: T2-T8, T10
 - 完成标准:
-  - 入口：`mewcode/__main__.py:40-45` 调 `load_hooks(config.raw_hooks)`，`HookConfigError` 时打 stderr + `sys.exit(1)`，否则 `HookEngine(hooks)` 传给 `MewCodeApp`
-  - App 装配：`mewcode/app.py:515 / 526` 接收 `hook_engine` 参数并持有；`mewcode/app.py:658` 把 `hook_engine` 透传给 `Agent`
-  - 生命周期：`mewcode/app.py:803-808`（startup）/`mewcode/app.py:1581-1587`（shutdown）派发对应事件
-  - Agent 字段：`mewcode/agent.py:296 / 314` 接收 `hook_engine` 参数；`mewcode/agent.py:371-382` 实现 `_build_hook_context`；`mewcode/agent.py:384-394` 实现 `_drain_hook_events`
+  - 入口：`cccode/__main__.py:40-45` 调 `load_hooks(config.raw_hooks)`，`HookConfigError` 时打 stderr + `sys.exit(1)`，否则 `HookEngine(hooks)` 传给 `CcCodeApp`
+  - App 装配：`cccode/app.py:515 / 526` 接收 `hook_engine` 参数并持有；`cccode/app.py:658` 把 `hook_engine` 透传给 `Agent`
+  - 生命周期：`cccode/app.py:803-808`（startup）/`cccode/app.py:1581-1587`（shutdown）派发对应事件
+  - Agent 字段：`cccode/agent.py:296 / 314` 接收 `hook_engine` 参数；`cccode/agent.py:371-382` 实现 `_build_hook_context`；`cccode/agent.py:384-394` 实现 `_drain_hook_events`
   - Agent loop 触发点：
-    - session_start：`mewcode/agent.py:407-410`
-    - turn_start：`mewcode/agent.py:427-430`
-    - pre_send：`mewcode/agent.py:460-463` + `get_prompt_messages` 注入下一轮
-    - post_receive：`mewcode/agent.py:509-512`
-    - pre_tool_use：`mewcode/agent.py:625-636`（reject 时把 `Hook rejected: {reason}` 包成 `ToolResult` 并 yield `ToolResultEvent(is_error=True)`）
-    - post_tool_use：`mewcode/agent.py:674-682`
-    - turn_end + session_end：`mewcode/agent.py:569-573`
+    - session_start：`cccode/agent.py:407-410`
+    - turn_start：`cccode/agent.py:427-430`
+    - pre_send：`cccode/agent.py:460-463` + `get_prompt_messages` 注入下一轮
+    - post_receive：`cccode/agent.py:509-512`
+    - pre_tool_use：`cccode/agent.py:625-636`（reject 时把 `Hook rejected: {reason}` 包成 `ToolResult` 并 yield `ToolResultEvent(is_error=True)`）
+    - post_tool_use：`cccode/agent.py:674-682`
+    - turn_end + session_end：`cccode/agent.py:569-573`
 - 实际产出: 同上
 
 ## T12: 端到端验证
 - 影响文件: 无
 - 依赖任务: T11
-- 完成标准: 在 `config.yaml` 配 `hooks: [{event: pre_tool_use, if: 'tool == "Bash" && args.command =~ /rm\s+-rf/', action: {type: prompt, message: "blocked"}, reject: true}]`，启动 `python -m mewcode` 让 LLM 调 Bash + `rm -rf` 看到工具结果是 `Hook rejected: blocked`；HTTP hook / async hook / once hook 路径由 `tests/test_hooks.py` 中对应测试覆盖。
+- 完成标准: 在 `config.yaml` 配 `hooks: [{event: pre_tool_use, if: 'tool == "Bash" && args.command =~ /rm\s+-rf/', action: {type: prompt, message: "blocked"}, reject: true}]`，启动 `python -m cccode` 让 LLM 调 Bash + `rm -rf` 看到工具结果是 `Hook rejected: blocked`；HTTP hook / async hook / once hook 路径由 `tests/test_hooks.py` 中对应测试覆盖。
 - 实际产出: 由 `TestAgentHookIntegration.test_pre_tool_use_reject_skips_tool` + `TestHookEngine` 系列覆盖；配置文件手测见 checklist §4。
 
 ## 进度

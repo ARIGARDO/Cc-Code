@@ -7,7 +7,7 @@ import unittest.mock
 
 import pytest
 
-from mewcode.hooks import (
+from cccode.hooks import (
     Action,
     Condition,
     ConditionGroup,
@@ -21,7 +21,7 @@ from mewcode.hooks import (
     load_hooks,
     parse_condition,
 )
-from mewcode.hooks.executors import (
+from cccode.hooks.executors import (
     execute_action,
     execute_agent,
     execute_command,

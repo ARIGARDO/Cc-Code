@@ -35,7 +35,7 @@ Anthropic 客户端在 system / tools 末项 / 最后一条 user message 末尾�
   2. id ∈ `state.seen_ids`（但不在 replacements）→ 保留原文。
   3. 外部已带 `PERSISTED_TAG` 前缀 → 视为已知决策，写入 state 与 records，作为字面字符串保留。
   4. 其余进 fresh，跑 Pass 1：单条 content 超 `SINGLE_RESULT_CHAR_LIMIT` → `persist_tool_result` + `make_persisted_preview` → 写入 state；剩余 fresh 跑 Pass 2：消息聚合 > `AGGREGATE_CHAR_LIMIT` 时按 content 长度降序挑直到聚合压回上限；未挑中的 fresh 标 seen 冻结为「不替换」。
-- F5: spill 文件 `persist_tool_result` 用 `os.open(O_WRONLY | O_CREAT | O_EXCL)` 写到 `<work_dir>/.mewcode/session/tool-results/<tool_use_id>.txt`，`FileExistsError` 静默吞掉（幂等）。
+- F5: spill 文件 `persist_tool_result` 用 `os.open(O_WRONLY | O_CREAT | O_EXCL)` 写到 `<work_dir>/.cccode/session/tool-results/<tool_use_id>.txt`，`FileExistsError` 静默吞掉（幂等）。
 - F6: preview 格式 `make_persisted_preview` 输出 `<persisted-output>\n输出太大（XKB），完整内容已保存到：\n<file_path>\n\n预览（前 2KB）：\n<content[:PREVIEW_CHARS]>\n</persisted-output>`。这个字符串一旦写入 `state.replacements`，后续每轮逐字节复读，不能改格式。
 - F7: 通过 `PERSISTED_TAG = "<persisted-output>"` 与 `SNIPPED_TAG = "<snipped>"` 前缀识别已 persist / snipped 内容，避免重复处理。
 - F8: Pass 3 陈旧裁剪 `_snip_stale_messages`：在 Pass 1/2 输出的 new history 上跑（不动原 conversation）；超过 `KEEP_RECENT_TURNS` 轮的消息里，超过 `OLD_RESULT_SNIP_CHARS` 字符且未被 PERSISTED/SNIPPED 前缀标记的 tool result 整体替换为 `<snipped>\n(旧结果已裁剪，原始长度 N 字符)\n<前 200 字符>\n… (snipped)`。
@@ -57,12 +57,12 @@ Anthropic 客户端在 system / tools 末项 / 最后一条 user message 末尾�
   - `tools` 末项的 schema dict 加 `"cache_control":{"type":"ephemeral"}`（用 `_mark_last_tool_for_cache` 浅拷贝避免污染调用方的工具表）。
   - 最后一条 user message 的末块用 `_mark_last_user_tail_for_cache` 原地打 marker（string content 自动 up-convert 为 block 列表）。
 - F17: `Agent.__init__` 把 `self.replacement_state = create_replacement_state()` 初始化为空容器；三处 `apply_tool_result_budget` 调用点（main loop / manual_compact / 另一主循环变体）都传 `self.replacement_state` 并把 new records 写入 transcript。
-- F18: Fork 子 Agent 路径 `mewcode/tools/agent_tool.py` 创建 sub_agent 后判断 `p.subagent_type is None`（即真 fork）时 `sub_agent.replacement_state = clone_replacement_state(self._parent_agent.replacement_state)`。
+- F18: Fork 子 Agent 路径 `cccode/tools/agent_tool.py` 创建 sub_agent 后判断 `p.subagent_type is None`（即真 fork）时 `sub_agent.replacement_state = clone_replacement_state(self._parent_agent.replacement_state)`。
 
 ### 3.5 压缩后恢复
 
 - F19: `RecoveryState` 类含 `_files: dict[str, FileReadRecord]` 与 `_skills: dict[str, SkillInvocationRecord]`，用 `threading.Lock` 守护；`record_file_read(path, content)` / `record_skill_invocation(name, body)` 加锁写入并以 `time.time()` 打时间戳，空路径 / 空名字直接 return；`snapshot_files(limit)` / `snapshot_skills()` 复制后按时间戳降序，文件再切到 limit。`Agent.__init__` 把 `self.recovery_state = RecoveryState()` 默认初始化。
-- F20: 限额常量 `RECOVERY_FILE_LIMIT = 5` / `RECOVERY_TOKENS_PER_FILE = 5_000` / `RECOVERY_SKILLS_BUDGET = 25_000` / `RECOVERY_TOKENS_PER_SKILL = 5_000` / `_RECOVERY_CHARS_PER_TOKEN = 3.5` 在 `mewcode/context/manager.py` 顶部段定义。`_approx_tokens` 按 3.5 chars/token 折算；`_truncate_by_tokens` 按预算硬切并追加 `\n… (内容已截断)` 标记。
+- F20: 限额常量 `RECOVERY_FILE_LIMIT = 5` / `RECOVERY_TOKENS_PER_FILE = 5_000` / `RECOVERY_SKILLS_BUDGET = 25_000` / `RECOVERY_TOKENS_PER_SKILL = 5_000` / `_RECOVERY_CHARS_PER_TOKEN = 3.5` 在 `cccode/context/manager.py` 顶部段定义。`_approx_tokens` 按 3.5 chars/token 折算；`_truncate_by_tokens` 按预算硬切并追加 `\n… (内容已截断)` 标记。
 - F21: `build_recovery_attachment(state, tool_schemas)` 渲染四段（顺序：`## 最近读过的文件` → `## 已激活的技能` → `## 可用工具` → `## 提示`）；任一段为空就跳过；全空返回 `""`；技能累计字节超过 `RECOVERY_SKILLS_BUDGET` 时停止追加。`build_compact_messages(summary, attachment="")` 把恢复块用 `\n\n---\n\n` 拼到 `[摘要]` user 消息之后再返回 `[user, assistant]`。
 - F22: `auto_compact` 多两个 kwargs `recovery: RecoveryState | None = None`、`tool_schemas: list[Mapping[str, Any]] | None = None`，生成 summary 后调 `build_recovery_attachment` 拿到 attachment，再调 `build_compact_messages(summary, attachment=attachment)`。三处调用点（main loop / `run_to_completion` / `manual_compact`）都传 `recovery=self.recovery_state` 与 `tool_schemas=self.registry.get_all_schemas(self.protocol)`。
 - F23: 工具快照：`Agent._snapshot_for_recovery(tc, result)` 在 `_execute_single_tool_direct` 与 `_execute_tool` 两条工具执行路径末尾调用，仅在 `not result.is_error and tc.tool_name == "ReadFile"` 时打开 `file_path` 读取整文件（`encoding="utf-8", errors="replace"`）并写入 `self.recovery_state`；`OSError` 静默吞掉。
@@ -73,7 +73,7 @@ Anthropic 客户端在 system / tools 末项 / 最后一条 user message 末尾�
 - N1: Layer 1 必须廉价：纯本地文件 I/O + 字符串改写，不调 LLM；每轮 agent loop 都跑也不能成为瓶颈。
 - N2: `apply_tool_result_budget` 不能 mutate 入参 `conversation` —— 通过新建 `Message` / `ToolResultBlock` 实例 + 重组 `new_history` 产出 api_conv。测试用 `test_apply_does_not_mutate_conv` 守住。
 - N3: 已决策 id 的复读必须**字节一致**：从 `state.replacements` 拿出来的字符串直接赋给 `decisions[id]`，不重新读盘、不重新格式化。这是 prompt cache 命中的硬约束。
-- N4: spill 写盘幂等：用 `O_CREAT | O_EXCL`，同 `tool_use_id` 重复运行写同一份内容，已存在则 `FileExistsError` 静默跳过；spill 文件路径稳定（`<work_dir>/.mewcode/session/tool-results/<tool_use_id>.txt`），不含时间戳。
+- N4: spill 写盘幂等：用 `O_CREAT | O_EXCL`，同 `tool_use_id` 重复运行写同一份内容，已存在则 `FileExistsError` 静默跳过；spill 文件路径稳定（`<work_dir>/.cccode/session/tool-results/<tool_use_id>.txt`），不含时间戳。
 - N5: Layer 2 期间不能再触发新的 tool call —— 摘要走的是临时 `ConversationManager` + `SUMMARY_PROMPT` 一次性 stream，不绕回 agent 主循环。
 - N6: `auto_compact` 替换 conversation 用 `conversation.replace_history(...)` 就地写法，让调用方持有的 `ConversationManager` 引用保持有效。
 - N7: 当 `breaker is None`（测试或一次性脚本场景）熔断器禁用，不能崩。
@@ -84,13 +84,13 @@ Anthropic 客户端在 system / tools 末项 / 最后一条 user message 末尾�
 
 ## 5. 设计概要
 
-- 核心模块结构 (`mewcode/context/manager.py`):
+- 核心模块结构 (`cccode/context/manager.py`):
   - 常量段（顶部）：阈值、tag、session 子目录。
   - 状态段：`ContentReplacementState` / `ContentReplacementRecord` / `create_replacement_state` / `clone_replacement_state` / `reconstruct_replacement_state` / `append_replacement_records` / `load_replacement_records` / `REPLACEMENT_RECORDS_FILENAME`。
   - Session 段：`ensure_session_dir` / `cleanup_tool_results`。
   - Layer 1 段：`persist_tool_result` / `make_persisted_preview` / `_count_turns` / `_copy_message_with_results` / `_snip_stale_messages` / `apply_tool_result_budget`。
   - Layer 2 段：`compute_compact_threshold` / `should_auto_compact` / `SUMMARY_PROMPT` / `extract_summary` / `COMPACT_BOUNDARY_MESSAGE` / `build_compact_messages` / `_group_messages_by_turn` / `CompactCircuitBreaker` / `auto_compact`。
-  - 恢复段：`RECOVERY_FILE_LIMIT / RECOVERY_TOKENS_PER_FILE / RECOVERY_SKILLS_BUDGET / RECOVERY_TOKENS_PER_SKILL / _RECOVERY_CHARS_PER_TOKEN` 常量 / `FileReadRecord` / `SkillInvocationRecord` dataclass / `RecoveryState` 类 + `record_file_read` / `record_skill_invocation` / `snapshot_files` / `snapshot_skills` / `_approx_tokens` / `_truncate_by_tokens` / `_first_line` / `build_recovery_attachment`。`mewcode/context/__init__.py` re-export 类名 + 工厂 + builder。
+  - 恢复段：`RECOVERY_FILE_LIMIT / RECOVERY_TOKENS_PER_FILE / RECOVERY_SKILLS_BUDGET / RECOVERY_TOKENS_PER_SKILL / _RECOVERY_CHARS_PER_TOKEN` 常量 / `FileReadRecord` / `SkillInvocationRecord` dataclass / `RecoveryState` 类 + `record_file_read` / `record_skill_invocation` / `snapshot_files` / `snapshot_skills` / `_approx_tokens` / `_truncate_by_tokens` / `_first_line` / `build_recovery_attachment`。`cccode/context/__init__.py` re-export 类名 + 工厂 + builder。
 - 主流程（每轮 agent loop）:
   - 主循环开头：`compact_result = await auto_compact(conversation, client, context_window, session_dir, ..., recovery=self.recovery_state, tool_schemas=self.registry.get_all_schemas(self.protocol))` 内部按阈值决定是否真做摘要；成功时 yield `CompactNotification` + 重新 `inject_environment` / `inject_long_term_memory`。
   - 各种 system reminder 写入 conversation。
@@ -104,14 +104,14 @@ Anthropic 客户端在 system / tools 末项 / 最后一条 user message 末尾�
   - `Agent.manual_compact` 直接调 `auto_compact(..., manual=True)`，拿到 `CompactEvent` 包成 `CompactNotification`，否则返回 `ErrorEvent`。
 - 主流程（fork 子 Agent）:
   - `AgentTool.execute` 触发 fork → 创建 sub_agent → 当 `p.subagent_type is None` 时 `sub_agent.replacement_state = clone_replacement_state(self._parent_agent.replacement_state)` → 子 Agent 用克隆状态独立演化。
-- Anthropic 客户端缓存断点（`mewcode/client.py`）:
+- Anthropic 客户端缓存断点（`cccode/client.py`）:
   - `_mark_last_user_tail_for_cache(messages)` 给最后一条 user message 末块打 marker（string content 自动 up-convert 成 block 列表）。
   - `_mark_last_tool_for_cache(tools)` 浅拷贝 tools，给末项加 marker。
   - system 参数包装成 block 列表带 marker。
 - 与其他模块的交互:
-  - 依赖 `mewcode.conversation`（`ConversationManager / Message / ToolResultBlock / ToolUseBlock` 与 `inject_environment / inject_long_term_memory / replace_history / serialize`）。
-  - 依赖 `mewcode.tools.base`（`TextDelta / StreamEnd / StreamEvent` 收摘要 stream 事件）。
-  - 被 `mewcode.agent.Agent`（主循环 + `manual_compact` + 另一主循环变体）、`mewcode.commands.handlers.compact`（`/compact` 命令）、`mewcode.tools.agent_tool`（fork clone）调用。
+  - 依赖 `cccode.conversation`（`ConversationManager / Message / ToolResultBlock / ToolUseBlock` 与 `inject_environment / inject_long_term_memory / replace_history / serialize`）。
+  - 依赖 `cccode.tools.base`（`TextDelta / StreamEnd / StreamEvent` 收摘要 stream 事件）。
+  - 被 `cccode.agent.Agent`（主循环 + `manual_compact` + 另一主循环变体）、`cccode.commands.handlers.compact`（`/compact` 命令）、`cccode.tools.agent_tool`（fork clone）调用。
 
 ## 6. Out of Scope
 

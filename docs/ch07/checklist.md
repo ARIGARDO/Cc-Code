@@ -4,11 +4,11 @@
 
 ## 1. 实现完整性
 
-- [ ] 数据结构 `MCPServerConfig` 在 `mewcode/config.py:67-78` 实现，字段含 `name / command / args / url / headers / env`，`is_stdio` property 在第 76-78 行（`git show origin/python:mewcode/config.py | grep -n "class MCPServerConfig"` 命中第 68 行）。
-- [ ] 数据结构 `MCPClient` 在 `mewcode/mcp/client.py:17-23` 实现，含 `config / name / _session / _stack / _alive` 五个属性（`git show origin/python:mewcode/mcp/client.py | grep -n "class MCPClient"` 命中第 17 行）。
-- [ ] 数据结构 `MCPManager` 在 `mewcode/mcp/manager.py:13-16` 实现，含 `_configs / _clients` 两张 dict（`git show origin/python:mewcode/mcp/manager.py | grep -n "class MCPManager"` 命中第 13 行）。
-- [ ] 数据结构 `MCPToolWrapper` 在 `mewcode/mcp/tool_wrapper.py:57-74` 实现，继承 `Tool` 基类，赋值 `name / description / category / should_defer / params_model`（`git show origin/python:mewcode/mcp/tool_wrapper.py | grep -n "class MCPToolWrapper"` 命中第 57 行）。
-- [ ] 函数 `MCPClient.connect` 在 `mewcode/mcp/client.py:29-51` 实现，按 `config.is_stdio` 分流到 `_connect_stdio` / `_connect_http`，握手通过 `ClientSession.initialize()`，失败回滚 `AsyncExitStack`。
+- [ ] 数据结构 `MCPServerConfig` 在 `cccode/config.py:67-78` 实现，字段含 `name / command / args / url / headers / env`，`is_stdio` property 在第 76-78 行（`git show origin/python:cccode/config.py | grep -n "class MCPServerConfig"` 命中第 68 行）。
+- [ ] 数据结构 `MCPClient` 在 `cccode/mcp/client.py:17-23` 实现，含 `config / name / _session / _stack / _alive` 五个属性（`git show origin/python:cccode/mcp/client.py | grep -n "class MCPClient"` 命中第 17 行）。
+- [ ] 数据结构 `MCPManager` 在 `cccode/mcp/manager.py:13-16` 实现，含 `_configs / _clients` 两张 dict（`git show origin/python:cccode/mcp/manager.py | grep -n "class MCPManager"` 命中第 13 行）。
+- [ ] 数据结构 `MCPToolWrapper` 在 `cccode/mcp/tool_wrapper.py:57-74` 实现，继承 `Tool` 基类，赋值 `name / description / category / should_defer / params_model`（`git show origin/python:cccode/mcp/tool_wrapper.py | grep -n "class MCPToolWrapper"` 命中第 57 行）。
+- [ ] 函数 `MCPClient.connect` 在 `cccode/mcp/client.py:29-51` 实现，按 `config.is_stdio` 分流到 `_connect_stdio` / `_connect_http`，握手通过 `ClientSession.initialize()`，失败回滚 `AsyncExitStack`。
 - [ ] 函数 `MCPClient._connect_stdio` 在 `client.py:53-65` 实现，用 `StdioServerParameters` + `mcp.client.stdio.stdio_client`，env 通过 `build_child_env` 白名单。
 - [ ] 函数 `MCPClient._connect_http` 在 `client.py:67-84` 实现，用 `httpx.AsyncClient` + `mcp.client.streamable_http.streamable_http_client`，header 通过 `resolve_env_vars` 展开。
 - [ ] 函数 `MCPClient.list_tools` 在 `client.py:86-89` 实现，调 `self._session.list_tools()` 返回 `list[types.Tool]`。
@@ -29,24 +29,24 @@
 
 ## 2. 接入完整性（必查，杜绝死代码）
 
-- [ ] `git show origin/python:mewcode/app.py | grep -nE "mcp_|MCPManager|_init_mcp"` 至少 12 处命中（实测含 import、字段、`on_mount` 派任务、`_init_mcp` / `_shutdown_mcp`、发消息 await、system reminder 注入）。
-- [ ] 调用入口位于 Textual TUI 的 `mewcode/app.py:810-811`：`if self._mcp_server_configs: self._mcp_init_task = asyncio.create_task(self._init_mcp())`。
+- [ ] `git show origin/python:cccode/app.py | grep -nE "mcp_|MCPManager|_init_mcp"` 至少 12 处命中（实测含 import、字段、`on_mount` 派任务、`_init_mcp` / `_shutdown_mcp`、发消息 await、system reminder 注入）。
+- [ ] 调用入口位于 Textual TUI 的 `cccode/app.py:810-811`：`if self._mcp_server_configs: self._mcp_init_task = asyncio.create_task(self._init_mcp())`。
 - [ ] 工具注册中心已更新：`_init_mcp`（`app.py:1496-1532`）调 `await manager.register_all_tools(self.registry)`，把 wrapper 注入 `ToolRegistry`。
 - [ ] System reminder 注入：连接成功后构造 `_mcp_instructions`（`app.py:1515-1532`，含 server 名与工具列表），发消息时若未注入则用 `conversation.add_system_reminder` 写入一次（`app.py:1068-1070`）。
-- [ ] 配置项 `mcp_servers` 已从 YAML 反序列化到 `AppConfig.mcp_servers`（`mewcode/config.py:129-139`），`__main__.py:52` 把 `config.mcp_servers` 传给 `MewCodeApp`。
+- [ ] 配置项 `mcp_servers` 已从 YAML 反序列化到 `AppConfig.mcp_servers`（`cccode/config.py:129-139`），`__main__.py:52` 把 `config.mcp_servers` 传给 `CcCodeApp`。
 - [ ] 用户输入到本模块的路径可一句话描述: Textual TUI 启动 → 读 `config.yaml.mcp_servers` → `MCPManager().load_configs(...) → register_all_tools(self.registry)` → 工具变成 `mcp_<server>_<tool>` → LLM 把它当普通工具调用 → `MCPToolWrapper.execute` 走 `MCPClient.call_tool` → MCP server 返回 `CallToolResult` → `_extract_text` 拼成字符串。
 - [ ] 退出时 `_shutdown_mcp`（`app.py:1534-1544`）取消 `_mcp_init_task` 并 await，再调 `manager.shutdown()` 清理所有 client。
 
 ## 3. 编译与测试
 
-- [ ] `ruff check mewcode/mcp/` 无报错（章节交付前已执行）。
-- [ ] `mypy mewcode/mcp/` 类型检查通过（若项目启用 mypy）。
+- [ ] `ruff check cccode/mcp/` 无报错（章节交付前已执行）。
+- [ ] `mypy cccode/mcp/` 类型检查通过（若项目启用 mypy）。
 - [ ] `pytest tests/test_mcp.py -v` 全绿，至少 14 个测试（`TestResolveEnvVars`、`TestBuildChildEnv`、`TestLoadConfigMCP`、`TestMCPToolWrapper`、`TestExtractText`、`TestMCPManagerPartialFailure` 六组）。
 - [ ] `pytest tests/test_mcp.py::TestMCPManagerPartialFailure -v` 单跑通过，验证单 server 失败不阻塞其他 server。
 
 ## 4. 端到端验证
 
-- [ ] 在 `config.yaml` 添加 context7 server（`command: npx, args: ["-y", "@upstash/context7-mcp"]`），启动 `python -m mewcode`，观察日志出现 `MCP server 'context7' connected` 与 `Registered MCP tool: mcp_context7_resolve_library_id` 类条目。
+- [ ] 在 `config.yaml` 添加 context7 server（`command: npx, args: ["-y", "@upstash/context7-mcp"]`），启动 `python -m cccode`，观察日志出现 `MCP server 'context7' connected` 与 `Registered MCP tool: mcp_context7_resolve_library_id` 类条目。
 - [ ] TUI 状态条 / 系统消息出现 `Connected to 1 MCP server(s), N tools registered`（`app.py:1512-1514`）。
 - [ ] 在 TUI 中提示 LLM 调 context7 工具（例：`use mcp_context7_resolve_library_id for "next.js"`），模型返回结果而非 `Tool not found`。
 - [ ] 留存证据: `tests/test_mcp.py` 包含 `TestMCPManagerPartialFailure::test_single_server_failure_does_not_block_others`，可重复运行。

@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 
-from mewcode.context.manager import (
+from cccode.context.manager import (
     RECOVERY_FILE_LIMIT,
     RECOVERY_TOKENS_PER_FILE,
     RECOVERY_TOKENS_PER_SKILL,

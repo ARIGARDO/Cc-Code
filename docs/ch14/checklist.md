@@ -4,7 +4,7 @@
 
 ## 实现完整性### worktree 子包
 
-- [ ] src/mewcode/worktree 子包存在且可导入(验证:`python -c "from mewcode import worktree"`)
+- [ ] src/cccode/worktree 子包存在且可导入(验证:`python -c "from cccode import worktree"`)
 - [ ] `validate_slug` 对合法/非法 case 行为符合 spec F1(验证:`pytest tests/test_worktree_slug.py -v`)
 - [ ] `flat_slug("team/alice") == "team+alice"`(验证:同上)
 - [ ] `WorktreeSession` JSON 序列化/反序列化字段名为下划线小写(验证:`pytest tests/test_worktree_manager.py -k session -v`)
@@ -14,16 +14,16 @@
 - [ ] `_resolve_head_sha_from_fs` 在真实 worktree 路径下返回 commit SHA(验证:`pytest tests/test_worktree_git.py -k resolve_head`)
 - [ ] `Manager(repo_root)` 校验 repo_root 是 git 仓库;非 git 目录抛 ValueError(验证:`pytest tests/test_worktree_manager.py -k construct -v`)
 - [ ] `Manager` 加载已存在的 session 文件;指向不存在目录的 session 自动清空(验证:同上)
-- [ ] `manager.create("alice", "HEAD", manual=True)` 在 `.mewcode/worktrees/alice/` 下落地 + 分支 `worktree-alice`(验证:`pytest tests/test_worktree_create.py`)
-- [ ] `manager.create("team/alice", ...)` 落地 `.mewcode/worktrees/team+alice/` + 分支 `worktree-team+alice`(验证:同上)
+- [ ] `manager.create("alice", "HEAD", manual=True)` 在 `.cccode/worktrees/alice/` 下落地 + 分支 `worktree-alice`(验证:`pytest tests/test_worktree_create.py`)
+- [ ] `manager.create("team/alice", ...)` 落地 `.cccode/worktrees/team+alice/` + 分支 `worktree-team+alice`(验证:同上)
 - [ ] `manager.create` 目录已存在时走快速恢复(不调 git;active 立即就绪)(验证:同上,可用 monkeypatch 替换 `_run_git` 断言未被调用)
 - [ ] `manager.create` 已 active 名字时再 create 抛异常(验证:同上)
-- [ ] 创建后设置 A——`.mewcode/settings.local.yaml` 被复制到 Worktree(验证:同上,需在测试 fixture 准备文件)
+- [ ] 创建后设置 A——`.cccode/settings.local.yaml` 被复制到 Worktree(验证:同上,需在测试 fixture 准备文件)
 - [ ] 创建后设置 B——主仓 `.husky/` 存在时 Worktree git config 含 core.hooksPath(验证:`pytest tests/test_worktree_create.py -k hooks`)
 - [ ] 创建后设置 C——主仓 node_modules 存在时 Worktree 内为软链(`Path.is_symlink()` 为 True)(验证:`pytest tests/test_worktree_create.py -k symlink`)
 - [ ] 创建后设置 D——主仓 `.worktreeinclude` 模式命中的 ignored 文件被复制到 Worktree(验证:`pytest tests/test_worktree_create.py -k include_ignored`)
 - [ ] `manager.enter(name)` 不改变进程 `Path.cwd()`,返回 session 含 original_cwd/worktree_path/session_id 等字段(验证:`pytest tests/test_worktree_lifecycle.py -k enter`)
-- [ ] `manager.enter` 持久化 session 到 `.mewcode/worktree_session.json`(验证:同上)
+- [ ] `manager.enter` 持久化 session 到 `.cccode/worktree_session.json`(验证:同上)
 - [ ] `manager.exit(name, REMOVE, ExitOptions())` 有变更时抛 `WorktreeHasChangesError`,Worktree 目录仍在(验证:`pytest tests/test_worktree_lifecycle.py -k exit`)
 - [ ] `manager.exit(name, REMOVE, ExitOptions(discard_changes=True))` 成功删除 Worktree + 分支;session 文件被清空(验证:同上)
 - [ ] `manager.exit` 调用了 `os.chdir(original_cwd)` 兜底(验证:测试时改进程 cwd 后调 exit,断言 cwd 回到 original)
@@ -56,7 +56,7 @@
 
 ### agent 包扩展
 
-- [ ] `agent.AgentTool` 含 `worktree_mgr: worktree.Manager | None` 字段;`__init__` 签名末尾接收 worktree_mgr(验证:`python -c "from mewcode.agent import AgentTool"`)
+- [ ] `agent.AgentTool` 含 `worktree_mgr: worktree.Manager | None` 字段;`__init__` 签名末尾接收 worktree_mgr(验证:`python -c "from cccode.agent import AgentTool"`)
 - [ ] `agent._execute_with_worktree` 调用 `manager.create` + `auto_cleanup`,期间通过 ctx 传 wt.path(验证:`pytest tests/test_agent_worktree.py -v`)
 - [ ] `build_worktree_notice` 输出含 `<worktree-context>` 标签 + 父目录 + 工作目录(验证:同上)
 - [ ] `AgentTool.execute` 在 `definition.isolation == "worktree"` 时走 worktree 分支(验证:同上)
@@ -65,7 +65,7 @@
 
 ### command 包扩展
 
-- [ ] `command.WorktreeSummary` 与 `WorktreeAccessor` Protocol 存在(验证:`python -c "from mewcode.command.ui import WorktreeAccessor, WorktreeSummary"`)
+- [ ] `command.WorktreeSummary` 与 `WorktreeAccessor` Protocol 存在(验证:`python -c "from cccode.command.ui import WorktreeAccessor, WorktreeSummary"`)
 - [ ] `UI` Protocol 加 `worktree_accessor()` 方法;`nop_ui` 返回 None(验证:同上)
 - [ ] `/worktree` 命令被注册,lookup 命中(验证:`pytest tests/test_command_builtins.py -k worktree_registered`)
 - [ ] `handle_worktree` 分发子命令 create/list/enter/exit/remove(验证:`pytest tests/test_command_builtins.py -k handle_worktree -v`)
@@ -73,44 +73,44 @@
 
 ### tui 包扩展
 
-- [ ] `MewCodeApp` 含 `worktree_mgr: worktree.Manager | None` 与 `active_cwd: str` 字段(验证:`python -c "from mewcode.tui.app import MewCodeApp"`)
-- [ ] `MewCodeApp.__init__` 接收 `worktree_mgr` 参数;启动时若 `manager.current_session()` 非 None,设 `active_cwd=session.worktree_path`(验证:`pytest tests/test_tui_app.py -k worktree`)
+- [ ] `CcCodeApp` 含 `worktree_mgr: worktree.Manager | None` 与 `active_cwd: str` 字段(验证:`python -c "from cccode.tui.app import CcCodeApp"`)
+- [ ] `CcCodeApp.__init__` 接收 `worktree_mgr` 参数;启动时若 `manager.current_session()` 非 None,设 `active_cwd=session.worktree_path`(验证:`pytest tests/test_tui_app.py -k worktree`)
 - [ ] 主 Agent Run 前用 `with with_cwd(...):` 包住——可通过 mock provider 断言 tool 调用收到的 cwd(验证:同上)
-- [ ] worktree_adapter 实现 WorktreeAccessor 协议(验证:`python -c "from mewcode.tui.worktree_adapter import WorktreeAdapter"`)
+- [ ] worktree_adapter 实现 WorktreeAccessor 协议(验证:`python -c "from cccode.tui.worktree_adapter import WorktreeAdapter"`)
 
 ### cli 接入
 
-- [ ] src/mewcode/cli.py 构造 Manager,失败 stderr 警告 + 降级(验证:启动 mewcode + 在非 git 目录测试)
+- [ ] src/cccode/cli.py 构造 Manager,失败 stderr 警告 + 降级(验证:启动 cccode + 在非 git 目录测试)
 - [ ] AgentTool 构造末尾追加 worktree_mgr(验证:同上)
-- [ ] MewCodeApp 构造接收 worktree_mgr(验证:同上)
-- [ ] 启动时异步跑 sweep_stale(验证:`grep -n sweep_stale src/mewcode/cli.py`)
-- [ ] .gitignore 追加 `.mewcode/worktrees/` 与 `.mewcode/worktree_session.json`(验证:`git check-ignore .mewcode/worktrees/test`)
+- [ ] CcCodeApp 构造接收 worktree_mgr(验证:同上)
+- [ ] 启动时异步跑 sweep_stale(验证:`grep -n sweep_stale src/cccode/cli.py`)
+- [ ] .gitignore 追加 `.cccode/worktrees/` 与 `.cccode/worktree_session.json`(验证:`git check-ignore .cccode/worktrees/test`)
 
 ## 集成
 
 - [ ] subagent.Definition.isolation + agent.AgentTool 协同——isolation:worktree 的 SubAgent 启动时自动创建 Worktree(验证:test_agent_worktree 通过)
 - [ ] tool ctx with_cwd + AgentTool._execute_with_worktree 协同——SubAgent 在 Worktree 内的工具调用使用 wt.path 作为 cwd(验证:集成测试,在临时 git repo 跑一个 mock subagent)
 - [ ] 主 Agent 工具列表稳定——5 个核心工具 + Agent + TaskList + TaskGet + TaskStop + SendMessage + worktree 不暴露新工具(验证:工具数计数)
-- [ ] worktree 包 + subagent 包 + agent 包 + command 包 + tui 包之间无导入循环(验证:`python -c "import mewcode.tui.app, mewcode.agent.agent_tool, mewcode.command.builtins, mewcode.worktree"`)
+- [ ] worktree 包 + subagent 包 + agent 包 + command 包 + tui 包之间无导入循环(验证:`python -c "import cccode.tui.app, cccode.agent.agent_tool, cccode.command.builtins, cccode.worktree"`)
 
 ## 编译与测试
 
-- [ ] 项目可启动:`python -m mewcode --help`(或正常进 TUI)
+- [ ] 项目可启动:`python -m cccode --help`(或正常进 TUI)
 - [ ] 所有单元测试通过:`pytest`
 - [ ] lint 通过:`ruff check`(可选 `ruff format --check`)
 
 ## 端到端场景(tmux 实跑)
 
-每个场景在 tmux 内启动一个 mewcode 实例完成,验证可视化行为。
+每个场景在 tmux 内启动一个 cccode 实例完成,验证可视化行为。
 
 **通用预置:**
-- 当前目录 `cd /Users/codemelo/mewcode`
+- 当前目录 `cd /Users/codemelo/cccode`
 - 已执行 `uv sync` 或 `pip install -e .`
 
 ### 场景 1:isolation:worktree 子 Agent 修改文件不影响主目录**预置:** 创建项目级自定义 Agent:
 
 ```
-.mewcode/agents/worktree-writer.md
+.cccode/agents/worktree-writer.md
 ---
 name: worktree-writer
 description: 在 Worktree 内写文件的测试 Agent
@@ -125,44 +125,44 @@ isolation: worktree
 并准备一个主目录文件 `echo "MAIN" > scratch_ch14.txt`(测试前 git status 干净,这个文件未跟踪)。
 
 **步骤:**
-- [ ] tmux 启动:`tmux new-session -d -s ch14 -x 200 -y 50 "python -m mewcode"`
+- [ ] tmux 启动:`tmux new-session -d -s ch14 -x 200 -y 50 "python -m cccode"`
 - [ ] 输入:「用 Agent 工具调 subagent_type=worktree-writer,prompt 是『把 scratch_ch14.txt 的内容覆盖为 SUBAGENT,只用 write_file 工具』」
 - [ ] 子 Agent 跑动,scrollback 出现 `Agent(...)` 行
-- [ ] tool_result 中末尾含 `[Worktree 保留: .mewcode/worktrees/agent-a... ,分支 worktree-agent-a...]`(因为有未提交修改,auto_cleanup 保留)
+- [ ] tool_result 中末尾含 `[Worktree 保留: .cccode/worktrees/agent-a... ,分支 worktree-agent-a...]`(因为有未提交修改,auto_cleanup 保留)
 - [ ] **主目录** `cat scratch_ch14.txt` 仍为 `MAIN`(验证主目录未被改)
-- [ ] **Worktree 副本** `cat .mewcode/worktrees/agent-a*/scratch_ch14.txt` 为 `SUBAGENT`
+- [ ] **Worktree 副本** `cat .cccode/worktrees/agent-a*/scratch_ch14.txt` 为 `SUBAGENT`
 - [ ] tmux 截屏断言:`tmux capture-pane -p -t ch14 | grep -i "worktree"`
-- [ ] 清理:`rm scratch_ch14.txt`,删除残留 worktree:在 mewcode 内 `/worktree remove agent-a... --discard`(或 `git worktree remove --force` 手动清)
+- [ ] 清理:`rm scratch_ch14.txt`,删除残留 worktree:在 cccode 内 `/worktree remove agent-a... --discard`(或 `git worktree remove --force` 手动清)
 - [ ] tmux kill-session -t ch14
 
 ### 场景 2:isolation:worktree 子 Agent 无变更时自动清理**预置:** 同场景 1 的 worktree-writer.md(已存在)。
 
 **步骤:**
-- [ ] tmux 启动 mewcode
+- [ ] tmux 启动 cccode
 - [ ] 输入:「用 Agent 工具调 subagent_type=worktree-writer,prompt 是『用 read_file 读 README.md 头 5 行,然后用 30 字总结』」
 - [ ] 子 Agent 跑动,tool_result 是总结文本
 - [ ] tool_result **不含**「Worktree 保留」字样(因为读文件不产生修改,auto_cleanup 直接清理)
-- [ ] `ls .mewcode/worktrees/` 不存在与本次任务对应的 `agent-a*` 目录(已被 auto_cleanup 删除)
+- [ ] `ls .cccode/worktrees/` 不存在与本次任务对应的 `agent-a*` 目录(已被 auto_cleanup 删除)
 - [ ] tmux kill-session
 
 ### 场景 3:`/worktree create` + `/worktree list` 手动管理**预置:** 当前在 main 分支,git 工作区干净。
 
 **步骤:**
-- [ ] tmux 启动 mewcode
+- [ ] tmux 启动 cccode
 - [ ] 输入:`/worktree create demo-feature`
-- [ ] scrollback 显示 `Worktree 已创建: .mewcode/worktrees/demo-feature (分支 worktree-demo-feature)`
+- [ ] scrollback 显示 `Worktree 已创建: .cccode/worktrees/demo-feature (分支 worktree-demo-feature)`
 - [ ] 输入:`/worktree list`
 - [ ] scrollback 显示一行含 `demo-feature` 的列表项,标记 `[manual]`(`manual=True`)
-- [ ] tmux 外验证:`ls .mewcode/worktrees/demo-feature/` 含正常 mewcode 仓库内容;`git -C .mewcode/worktrees/demo-feature branch` 显示在 `worktree-demo-feature`
+- [ ] tmux 外验证:`ls .cccode/worktrees/demo-feature/` 含正常 cccode 仓库内容;`git -C .cccode/worktrees/demo-feature branch` 显示在 `worktree-demo-feature`
 - [ ] 清理:输入 `/worktree remove demo-feature --discard`
-- [ ] 验证 `.mewcode/worktrees/demo-feature` 已不存在
+- [ ] 验证 `.cccode/worktrees/demo-feature` 已不存在
 - [ ] tmux kill-session
 
 ### 场景 4:`/worktree exit` 变更保护**预置:** 同场景 3 创建好 `demo-feature`。
 
 **步骤:**
-- [ ] 手动写一个修改:`echo "modified" > .mewcode/worktrees/demo-feature/test.txt`
-- [ ] tmux 启动 mewcode
+- [ ] 手动写一个修改:`echo "modified" > .cccode/worktrees/demo-feature/test.txt`
+- [ ] tmux 启动 cccode
 - [ ] 输入:`/worktree enter demo-feature`
 - [ ] 输入:`/worktree exit --remove` (不加 --discard)
 - [ ] scrollback 显示错误 `worktree has uncommitted changes or new commits`(或对应中文消息)
@@ -173,9 +173,9 @@ isolation: worktree
 ### 场景 5:explicit cwd——`/worktree enter` 后工具调用用 worktree 路径**预置:** 创建 worktree 并准备测试文件。
 
 **步骤:**
-- [ ] tmux 启动 mewcode
+- [ ] tmux 启动 cccode
 - [ ] 输入:`/worktree create cwd-test`
-- [ ] 在 tmux 外:`echo "in-worktree-only" > .mewcode/worktrees/cwd-test/probe.txt`(主目录无 probe.txt)
+- [ ] 在 tmux 外:`echo "in-worktree-only" > .cccode/worktrees/cwd-test/probe.txt`(主目录无 probe.txt)
 - [ ] tmux 内输入:`/worktree enter cwd-test`
 - [ ] 输入:「用 read_file 读 probe.txt」
 - [ ] 主 Agent 调 read_file 工具(path=probe.txt 相对路径)
@@ -187,9 +187,9 @@ isolation: worktree
 - [ ] tmux kill-session
 
 ### 场景 6:Slug 校验阻止路径遍历**步骤:**
-- [ ] tmux 启动 mewcode
+- [ ] tmux 启动 cccode
 - [ ] 输入:`/worktree create ../etc`
-- [ ] scrollback 显示错误,含「invalid」或「拒绝」(不创建 `.mewcode/etc/` 或类似)
+- [ ] scrollback 显示错误,含「invalid」或「拒绝」(不创建 `.cccode/etc/` 或类似)
 - [ ] 输入:`/worktree create ..`
 - [ ] 同样错误
 - [ ] 输入:`/worktree create normal_one`

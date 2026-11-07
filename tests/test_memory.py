@@ -6,18 +6,18 @@ import datetime
 from pathlib import Path
 
 
-from mewcode.conversation import (
+from cccode.conversation import (
     ConversationManager,
     Message,
     ToolResultBlock,
     ToolUseBlock,
 )
-from mewcode.memory.instructions import (
+from cccode.memory.instructions import (
     MAX_INCLUDE_DEPTH,
     load_instructions,
     process_includes,
 )
-from mewcode.memory.session import (
+from cccode.memory.session import (
     RecordType,
     SessionRecord,
     SessionMeta,
@@ -28,7 +28,7 @@ from mewcode.memory.session import (
     validate_message_chain,
     TITLE_MAX_LENGTH,
 )
-from mewcode.memory.auto_memory import (
+from cccode.memory.auto_memory import (
     MemoryManager,
     MEMORY_EXTRACTION_PROMPT,
 )
@@ -84,15 +84,15 @@ class TestProcessIncludes:
 
 class TestLoadInstructions:
     def test_single_layer(self, tmp_path):
-        mewcode_md = tmp_path / "MEWCODE.md"
-        mewcode_md.write_text("Project instructions here", encoding="utf-8")
+        cccode_md = tmp_path / "CCCODE.md"
+        cccode_md.write_text("Project instructions here", encoding="utf-8")
         result = load_instructions(tmp_path)
         assert "Project instructions here" in result
 
     def test_multi_layer_priority(self, tmp_path):
-        root_md = tmp_path / "MEWCODE.md"
+        root_md = tmp_path / "CCCODE.md"
         root_md.write_text("Root level", encoding="utf-8")
-        dot_md = tmp_path / ".mewcode" / "MEWCODE.md"
+        dot_md = tmp_path / ".cccode" / "CCCODE.md"
         dot_md.parent.mkdir(parents=True, exist_ok=True)
         dot_md.write_text("Dot level", encoding="utf-8")
         result = load_instructions(tmp_path)
@@ -237,7 +237,7 @@ class TestValidateMessageChain:
 
 class TestSession:
     def test_append_writes_jsonl_and_updates_meta(self, tmp_path):
-        sessions_dir = tmp_path / ".mewcode" / "sessions"
+        sessions_dir = tmp_path / ".cccode" / "sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
         meta = SessionMeta(id="test_session")
         jsonl_path = sessions_dir / "test_session.jsonl"
@@ -253,7 +253,7 @@ class TestSession:
         assert meta.message_count == 1
 
     def test_title_set_from_first_user_message(self, tmp_path):
-        sessions_dir = tmp_path / ".mewcode" / "sessions"
+        sessions_dir = tmp_path / ".cccode" / "sessions"
         sessions_dir.mkdir(parents=True, exist_ok=True)
         meta = SessionMeta(id="test_session2")
         jsonl_path = sessions_dir / "test_session2.jsonl"

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 
-from mewcode.conversation import ConversationManager, Message, ToolResultBlock
-from mewcode.context.manager import (
+from cccode.conversation import ConversationManager, Message, ToolResultBlock
+from cccode.context.manager import (
     SINGLE_RESULT_CHAR_LIMIT,
     ContentReplacementRecord,
     append_replacement_records,

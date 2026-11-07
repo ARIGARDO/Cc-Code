@@ -4,43 +4,43 @@
 
 ## T1: 常量、tag 与 session 助手
 
-- 影响文件: `mewcode/context/manager.py:14-30, 132-145`
+- 影响文件: `cccode/context/manager.py:14-30, 132-145`
 - 依赖任务: 无
 - 完成标准: `SINGLE_RESULT_CHAR_LIMIT / AGGREGATE_CHAR_LIMIT / PREVIEW_CHARS / KEEP_RECENT_TURNS / OLD_RESULT_SNIP_CHARS / SNIPPED_TAG / SUMMARY_OUTPUT_RESERVE / AUTO_COMPACT_SAFETY_MARGIN / MANUAL_COMPACT_SAFETY_MARGIN / PERSISTED_TAG / SESSION_SUBDIR` 全部定义；`ensure_session_dir(work_dir)` / `cleanup_tool_results(session_dir)` 实现。
 
 ## T2: `CompactEvent` / `ContentReplacementState` / `ContentReplacementRecord` dataclass
 
-- 影响文件: `mewcode/context/manager.py:37-58`
+- 影响文件: `cccode/context/manager.py:37-58`
 - 依赖任务: T1
 - 完成标准: `CompactEvent(before_tokens)` 在 `manager.py:37-38` 定义。`ContentReplacementState` 含 `seen_ids: set[str]` + `replacements: dict[str, str]` 两个 field（都用 `default_factory`），`manager.py:46-49` 定义。`ContentReplacementRecord` 含 `tool_use_id` / `replacement` / `kind="tool-result"`，`manager.py:52-56` 定义。
 
 ## T3: `create_replacement_state` / `clone_replacement_state`
 
-- 影响文件: `mewcode/context/manager.py:59-68`
+- 影响文件: `cccode/context/manager.py:59-68`
 - 依赖任务: T2
 - 完成标准: `create_replacement_state()` 返回空容器；`clone_replacement_state(src)` 用 `set(src.seen_ids)` 与 `dict(src.replacements)` 浅拷贝，源与拷贝彼此独立；`test_clone_independent` 通过。
 
 ## T4: Transcript JSONL `append_replacement_records` / `load_replacement_records`
 
-- 影响文件: `mewcode/context/manager.py:70-104`
+- 影响文件: `cccode/context/manager.py:70-104`
 - 依赖任务: T2
 - 完成标准: `REPLACEMENT_RECORDS_FILENAME = "replacement_records.jsonl"` 在 `manager.py:70` 定义。`append_replacement_records(session_dir, records)`：空切片直接 return；用 `open("a", encoding="utf-8")` 追加，每行一个 `{"kind": ..., "tool_use_id": ..., "replacement": ...}` 对象；`load_replacement_records(session_dir)`：缺文件返回空列表；逐行 `json.loads`。`test_append_and_load_records_roundtrip` 通过。
 
 ## T5: `reconstruct_replacement_state`
 
-- 影响文件: `mewcode/context/manager.py:107-127`
+- 影响文件: `cccode/context/manager.py:107-127`
 - 依赖任务: T2, T4
 - 完成标准: 先 seed `seen_ids` = `{ tr.tool_use_id | for tr in m.tool_results, for m in messages }`；按 `r.kind == "tool-result"` 过滤 records 并命中 candidate 才写入 `replacements`；可选 `inherited_replacements` 在 candidate ∩ 未被 records 覆盖时补全；`test_reconstruct_from_records / test_reconstruct_with_inherited_parent` 通过。
 
 ## T6: `persist_tool_result` / `make_persisted_preview`
 
-- 影响文件: `mewcode/context/manager.py:148-170`
+- 影响文件: `cccode/context/manager.py:148-170`
 - 依赖任务: T1
 - 完成标准: `persist_tool_result` 用 `os.open(O_WRONLY | O_CREAT | O_EXCL)` 写到 `<session_dir>/<tool_use_id>.txt`，`FileExistsError` 静默吞掉（幂等）。`make_persisted_preview` 输出 `<persisted-output>\n输出太大（XKB），完整内容已保存到：\n<file_path>\n\n预览（前 2KB）：\n<content[:PREVIEW_CHARS]>\n</persisted-output>`。`TestPersistToolResult` / `TestMakePersistedPreview` 通过。
 
 ## T7: 辅助 `_count_turns` / `_copy_message_with_results` / `_snip_stale_messages`
 
-- 影响文件: `mewcode/context/manager.py:173-238`
+- 影响文件: `cccode/context/manager.py:173-238`
 - 依赖任务: T1, T6
 - 完成标准:
   - `_count_turns(messages)` 数 `assistant && not tool_uses` 当作一轮。
@@ -49,7 +49,7 @@
 
 ## T8: Layer 1 `apply_tool_result_budget` Design B 主流程
 
-- 影响文件: `mewcode/context/manager.py:241-348`
+- 影响文件: `cccode/context/manager.py:241-348`
 - 依赖任务: T2, T6, T7
 - 完成标准: 签名 `apply_tool_result_budget(conversation, session_dir, state) -> tuple[ConversationManager, list[ContentReplacementRecord]]`，**不修改入参 conversation**。算法：
   1. 阶段 1: 对每个 tr 分四类——`state.replacements` 命中 → 复读；`state.seen_ids` 命中 → 冻结原文；外部已带 `PERSISTED_TAG` 前缀 → 视为已知决策，写入 state 与 records；其余进 fresh。
@@ -61,31 +61,31 @@
 
 ## T9: 阈值计算 `compute_compact_threshold` / `should_auto_compact`
 
-- 影响文件: `mewcode/context/manager.py:350-358`
+- 影响文件: `cccode/context/manager.py:350-358`
 - 依赖任务: T1
 - 完成标准: `compute_compact_threshold(200_000) == 167_000`、`compute_compact_threshold(200_000, manual=True) == 177_000`、`compute_compact_threshold(128_000) == 95_000`；`should_auto_compact(last_input_tokens, context_window)` 边界精确。`TestComputeCompactThreshold / TestShouldAutoCompact` 通过。
 
 ## T10: 摘要 prompt + helpers (`SUMMARY_PROMPT` / `extract_summary` / `COMPACT_BOUNDARY_MESSAGE` / `build_compact_messages` / `_group_messages_by_turn`)
 
-- 影响文件: `mewcode/context/manager.py:360-419`
+- 影响文件: `cccode/context/manager.py:360-419`
 - 依赖任务: T1
 - 完成标准: `SUMMARY_PROMPT` 含九节结构 + 两次禁止工具调用 + 先 `<analysis>` 再 `<summary>` 的要求；`extract_summary` 找到 `<summary>...</summary>` 整对时返回内部 trim，找不到时返回原文整体；`build_compact_messages(summary)` 输出 `[user '[摘要]\n...', assistant COMPACT_BOUNDARY_MESSAGE]` 两条；`_group_messages_by_turn` 按 `assistant && not tool_uses` 切轮。`TestExtractSummary / TestBuildCompactMessages` 通过。
 
 ## T11: 熔断器 `CompactCircuitBreaker`
 
-- 影响文件: `mewcode/context/manager.py:421-436`
+- 影响文件: `cccode/context/manager.py:421-436`
 - 依赖任务: T1
 - 完成标准: `@dataclass` 含 `max_failures: int = 3` 默认值与 `consecutive_failures: int = field(init=False, default=0)`；`record_failure / record_success / is_open` 三方法行为正确；`TestCompactCircuitBreaker` 通过。
 
 ## T12: Layer 2 `auto_compact`
 
-- 影响文件: `mewcode/context/manager.py:439-end`
+- 影响文件: `cccode/context/manager.py:439-end`
 - 依赖任务: T9, T10, T11
 - 完成标准: 自动模式 `conversation.last_input_tokens < threshold` 返回 `None`；`breaker.is_open()` 返回错误字符串；构造临时 `ConversationManager`（header SUMMARY_PROMPT + 原 history + 结尾再次提醒不要调工具）通过 `client.stream(summary_conv, system=SUMMARY_PROMPT)` 收 `TextDelta` 拼成文本；PTL 重试用 `_group_messages_by_turn` 丢最旧 1/5，最多 3 次；成功调 `conversation.replace_history(build_compact_messages(summary))` + `cleanup_tool_results(session_dir)` + `breaker.record_success()`，返回 `CompactEvent(before_tokens)`；失败 `breaker.record_failure()` 返回错误字符串。
 
 ## T13: Anthropic 客户端缓存断点
 
-- 影响文件: `mewcode/client.py:24-68, 138-160`
+- 影响文件: `cccode/client.py:24-68, 138-160`
 - 依赖任务: 无
 - 完成标准:
   - `_EPHEMERAL = {"type": "ephemeral"}` 常量定义。
@@ -95,7 +95,7 @@
 
 ## T14: Agent 集成
 
-- 影响文件: `mewcode/agent.py:15-27, 314-316, 436-516, 887-918, 960-1003`
+- 影响文件: `cccode/agent.py:15-27, 314-316, 436-516, 887-918, 960-1003`
 - 依赖任务: T8, T12, T13
 - 完成标准:
   - import 段加 `ContentReplacementRecord / ContentReplacementState / append_replacement_records / create_replacement_state / load_replacement_records / reconstruct_replacement_state`。
@@ -106,9 +106,9 @@
 
 ## T15: Fork 状态继承
 
-- 影响文件: `mewcode/tools/agent_tool.py:192-203`
+- 影响文件: `cccode/tools/agent_tool.py:192-203`
 - 依赖任务: T3, T14
-- 完成标准: 创建 sub_agent 后判断 `p.subagent_type is None`（即真 fork）时 `from mewcode.context import clone_replacement_state` → `sub_agent.replacement_state = clone_replacement_state(self._parent_agent.replacement_state)`。
+- 完成标准: 创建 sub_agent 后判断 `p.subagent_type is None`（即真 fork）时 `from cccode.context import clone_replacement_state` → `sub_agent.replacement_state = clone_replacement_state(self._parent_agent.replacement_state)`。
 
 ## T16: 测试
 
@@ -125,13 +125,13 @@
 - 依赖任务: T14, T15, T16
 - 完成标准:
   - `PYTHONPATH=. pytest tests/test_context.py tests/test_replacement_state.py -v` 全部通过（共 33 个用例）。
-  - 制造一次 Bash 大输出（> 5000 字符），观察 `.mewcode/session/tool-results/<tool_use_id>.txt` 文件落地；`.mewcode/session/replacement_records.jsonl` 出现对应行；对话历史里相应 tool result 仍为原文（Design B 不 mutate 原 conv），api_conv 视图里是 preview。
+  - 制造一次 Bash 大输出（> 5000 字符），观察 `.cccode/session/tool-results/<tool_use_id>.txt` 文件落地；`.cccode/session/replacement_records.jsonl` 出现对应行；对话历史里相应 tool result 仍为原文（Design B 不 mutate 原 conv），api_conv 视图里是 preview。
   - 制造一次连续多轮长对话使 `last_input_tokens >= 167_000`（200K 窗口）→ 主循环自动触发 Layer 2，事件流出现 `CompactNotification(before_tokens=...)`，对话被替换为 `[摘要] + 边界消息` 两条。
   - 短会话下在 TUI 输入 `/compact`，看到 `当前 token 数 X，无需压缩`。
 
 ## T18: `RecoveryState` 与限额常量
 
-- 影响文件: `mewcode/context/manager.py:1-20, 410-510`
+- 影响文件: `cccode/context/manager.py:1-20, 410-510`
 - 依赖任务: T1
 - 完成标准:
   - 顶部 import 新增 `import threading`、`import time`。
@@ -142,7 +142,7 @@
 
 ## T19: `build_recovery_attachment` + `build_compact_messages` 扩展
 
-- 影响文件: `mewcode/context/manager.py:512-620`
+- 影响文件: `cccode/context/manager.py:512-620`
 - 依赖任务: T18
 - 完成标准:
   - `_approx_tokens(s)` 按 `len / 3.5` 折算；`_truncate_by_tokens(s, budget)` 超额时按 byte 上限切并追加 `\n… (内容已截断)`；`_first_line(s)` 返回第一行非空文本。
@@ -152,10 +152,10 @@
 
 ## T20: `auto_compact` / Agent / Skill 集成
 
-- 影响文件: `mewcode/context/manager.py:622-660`、`mewcode/context/__init__.py`、`mewcode/agent.py:295-330, 460-475, 920-930, 1000-1010, 850-870`、`mewcode/skills/executor.py:58-95`
+- 影响文件: `cccode/context/manager.py:622-660`、`cccode/context/__init__.py`、`cccode/agent.py:295-330, 460-475, 920-930, 1000-1010, 850-870`、`cccode/skills/executor.py:58-95`
 - 依赖任务: T18, T19, T10
 - 完成标准:
-  - `mewcode/context/__init__.py` re-export `RecoveryState / FileReadRecord / SkillInvocationRecord / build_recovery_attachment`。
+  - `cccode/context/__init__.py` re-export `RecoveryState / FileReadRecord / SkillInvocationRecord / build_recovery_attachment`。
   - `auto_compact` 多两个 kwargs `recovery: RecoveryState | None = None`、`tool_schemas: list[Mapping[str, Any]] | None = None`，在生成 summary 后调 `build_recovery_attachment` 拿 attachment 再传给 `build_compact_messages(summary, attachment=attachment)`。
   - `Agent.__init__` 新增 `self.recovery_state: RecoveryState = RecoveryState()`。
   - 三处 `auto_compact` 调用点（`Agent.run` 主循环 / `manual_compact` / `run_to_completion`）都传 `recovery=self.recovery_state` 与 `tool_schemas=self.registry.get_all_schemas(self.protocol)`。

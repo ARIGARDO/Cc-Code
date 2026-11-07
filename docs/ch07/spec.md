@@ -2,15 +2,15 @@
 
 ## 1. 背景
 
-外部能力（Context7、GitHub、Slack、数据库等）通过 Model Context Protocol（MCP）暴露给 Agent。如果没有 MCP 客户端实现，MewCode 就只能依赖内置工具，无法接入生态里已有的几百个 MCP server，等于砍掉一大块工具生态。MCP 规范定义了 JSON-RPC 2.0 之上的握手 → 工具发现 → 工具调用三阶段会话，需要本章把这三阶段、两种传输（stdio / Streamable HTTP）以及到 `Tool` 抽象基类的适配器实现，并接到 Textual TUI 的启动流程里。Python 版基于官方 `mcp` SDK（`ClientSession`、`stdio_client`、`streamable_http_client`），传输生命周期用 `AsyncExitStack` 统一收尾。
+外部能力（Context7、GitHub、Slack、数据库等）通过 Model Context Protocol（MCP）暴露给 Agent。如果没有 MCP 客户端实现，CcCode 就只能依赖内置工具，无法接入生态里已有的几百个 MCP server，等于砍掉一大块工具生态。MCP 规范定义了 JSON-RPC 2.0 之上的握手 → 工具发现 → 工具调用三阶段会话，需要本章把这三阶段、两种传输（stdio / Streamable HTTP）以及到 `Tool` 抽象基类的适配器实现，并接到 Textual TUI 的启动流程里。Python 版基于官方 `mcp` SDK（`ClientSession`、`stdio_client`、`streamable_http_client`），传输生命周期用 `AsyncExitStack` 统一收尾。
 
 ## 2. 目标
 
-交付一个能在 MewCode 启动时按配置批量连接外部 MCP server、把每个 server 暴露的工具注册到全局 `ToolRegistry` 的异步客户端。具体能力：单服务器 `MCPClient` 封装（`connect` / `list_tools` / `call_tool` / `close`）；多服务器 `MCPManager` 封装（`load_configs` / `register_all_tools` / `get_client` / `shutdown`）；`MCPToolWrapper` 把每个 MCP tool 适配到 MewCode 的 `Tool` 抽象基类，并用 `pydantic.create_model` 动态生成参数模型；工具名按 `mcp_<server>_<tool>` 命名。最终效果是用户在 Textual TUI 里看到 MCP server 的工具与内置工具并列，能直接被 LLM 调用。
+交付一个能在 CcCode 启动时按配置批量连接外部 MCP server、把每个 server 暴露的工具注册到全局 `ToolRegistry` 的异步客户端。具体能力：单服务器 `MCPClient` 封装（`connect` / `list_tools` / `call_tool` / `close`）；多服务器 `MCPManager` 封装（`load_configs` / `register_all_tools` / `get_client` / `shutdown`）；`MCPToolWrapper` 把每个 MCP tool 适配到 CcCode 的 `Tool` 抽象基类，并用 `pydantic.create_model` 动态生成参数模型；工具名按 `mcp_<server>_<tool>` 命名。最终效果是用户在 Textual TUI 里看到 MCP server 的工具与内置工具并列，能直接被 LLM 调用。
 
 ## 3. 功能需求
 
-- F1: `MCPServerConfig`（`mewcode/config.py:67-78`）同时支持 stdio（`command + args + env`）和 HTTP（`url + headers`）两种传输，`is_stdio` 属性通过 `command is not None` 区分。
+- F1: `MCPServerConfig`（`cccode/config.py:67-78`）同时支持 stdio（`command + args + env`）和 HTTP（`url + headers`）两种传输，`is_stdio` 属性通过 `command is not None` 区分。
 - F2: HTTP 传输用 `mcp.client.streamable_http.streamable_http_client` 建立 Streamable HTTP 会话，外部 `httpx.AsyncClient` 注入 header。
 - F3: stdio 子进程通过 `StdioServerParameters` 启动，环境用 `build_child_env` 白名单，避免泄露宿主机 API key。
 - F4: HTTP 请求头通过 `resolve_env_vars` 在客户端层做 `${VAR}` 展开，方便从 ENV 取 API key。
@@ -33,22 +33,22 @@
 ## 5. 设计概要
 
 - 核心数据结构（Python 类型）:
-  - `MCPServerConfig`（`mewcode/config.py:67`，dataclass）：承载 `name / command / args / url / headers / env`，`is_stdio` property。
-  - `MCPClient`（`mewcode/mcp/client.py:17`）：单 server 的会话句柄，持有 `config / _session / _stack / _alive`。
-  - `MCPManager`（`mewcode/mcp/manager.py:13`）：多 server 调度，持有 `_configs / _clients` 两张 dict。
-  - `MCPToolWrapper`（`mewcode/mcp/tool_wrapper.py:57`）：把 MCP tool 适配到 `Tool` 抽象基类，动态生成 `params_model`。
+  - `MCPServerConfig`（`cccode/config.py:67`，dataclass）：承载 `name / command / args / url / headers / env`，`is_stdio` property。
+  - `MCPClient`（`cccode/mcp/client.py:17`）：单 server 的会话句柄，持有 `config / _session / _stack / _alive`。
+  - `MCPManager`（`cccode/mcp/manager.py:13`）：多 server 调度，持有 `_configs / _clients` 两张 dict。
+  - `MCPToolWrapper`（`cccode/mcp/tool_wrapper.py:57`）：把 MCP tool 适配到 `Tool` 抽象基类，动态生成 `params_model`。
 - 主流程（调用链）:
-  - `mewcode/__main__.py:49` 启动 `MewCodeApp` 时把 `config.mcp_servers` 传进去。
-  - `mewcode/app.py:810-811` `on_mount` 在 `self._mcp_server_configs` 非空时 `asyncio.create_task(self._init_mcp())`。
+  - `cccode/__main__.py:49` 启动 `CcCodeApp` 时把 `config.mcp_servers` 传进去。
+  - `cccode/app.py:810-811` `on_mount` 在 `self._mcp_server_configs` 非空时 `asyncio.create_task(self._init_mcp())`。
   - `_init_mcp`（`app.py:1496-1532`）实例化 `MCPManager`，`load_configs` + `register_all_tools(self.registry)`，把每个 server 的 tool 包成 `MCPToolWrapper` 注册。
   - 对每个 server `MCPClient(config).connect()`：按 `is_stdio` 分流到 `_connect_stdio` 或 `_connect_http`，握手得到 `ClientSession`，把 transport 和 session 都丢进 `AsyncExitStack`。
   - LLM 调用工具时按 `mcp_<server>_<tool>` 找到 wrapper，`execute` 走 session 上的 `call_tool`，把 `inputSchema` 校验后的 `BaseModel.model_dump(exclude_none=True)` 作为参数。
 - 与其他模块的交互:
-  - 依赖 `mewcode/tools`（注册到 `ToolRegistry`、继承 `Tool` 基类）。
+  - 依赖 `cccode/tools`（注册到 `ToolRegistry`、继承 `Tool` 基类）。
   - 依赖官方 `mcp` Python SDK（`ClientSession` / `stdio_client` / `streamable_http_client` / `types`）。
   - 依赖 `httpx.AsyncClient` 作为 HTTP transport 的底层连接池。
-  - 被 `mewcode/app.py`（Textual TUI 主类）在启动流程中调用。
-  - 依赖 `mewcode/config.py` 提供 `MCPServerConfig` 反序列化目标及 `resolve_env_vars / build_child_env` 工具。
+  - 被 `cccode/app.py`（Textual TUI 主类）在启动流程中调用。
+  - 依赖 `cccode/config.py` 提供 `MCPServerConfig` 反序列化目标及 `resolve_env_vars / build_child_env` 工具。
 
 ## 6. Out of Scope
 

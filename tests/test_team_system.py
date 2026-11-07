@@ -12,24 +12,24 @@ from typing import Any
 
 import pytest
 
-from mewcode.team.backend import InProcessBackend, SpawnRequest
-from mewcode.team.manager import TeamManager, sanitize
-from mewcode.team.registry import AgentNameRegistry
-from mewcode.team.types import (
+from cccode.team.backend import InProcessBackend, SpawnRequest
+from cccode.team.manager import TeamManager, sanitize
+from cccode.team.registry import AgentNameRegistry
+from cccode.team.types import (
     BackendType,
     Team,
     TeamError,
     TeammateInfo,
 )
-from mewcode.team.mailbox import (
+from cccode.team.mailbox import (
     Mailbox,
     build_text_message,
     build_shutdown_request,
     build_shutdown_response,
     build_plan_approval,
 )
-from mewcode.team.tasks import TaskStore
-from mewcode.team.tools import TEAM_TOOL_NAMES, is_team_tool, build_team_tools
+from cccode.team.tasks import TaskStore
+from cccode.team.tools import TEAM_TOOL_NAMES, is_team_tool, build_team_tools
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -444,20 +444,20 @@ class TestTeamTools:
 
 class TestToolBehaviour:
     def test_team_create_tool(self, team_manager: TeamManager):
-        from mewcode.team.tools.team_create import TeamCreateTool
+        from cccode.team.tools.team_create import TeamCreateTool
         tool = TeamCreateTool(team_manager)
         result = asyncio.run(tool.execute({"name": "Apollo", "description": "moon"}))
         assert "Apollo" in result.output
 
     def test_team_create_tool_invalid_args(self, team_manager: TeamManager):
-        from mewcode.team.tools.team_create import TeamCreateTool
+        from cccode.team.tools.team_create import TeamCreateTool
         tool = TeamCreateTool(team_manager)
         # Missing required 'name'
         result = asyncio.run(tool.execute({}))
         assert result.is_error is True or "Invalid" in result.output
 
     def test_task_create_tool(self, team_manager: TeamManager):
-        from mewcode.team.tools.task_create import TaskCreateTool
+        from cccode.team.tools.task_create import TaskCreateTool
         asyncio.run(team_manager.create("Apollo"))
         tool = TaskCreateTool(team_manager)
         result = asyncio.run(tool.execute({
@@ -469,8 +469,8 @@ class TestToolBehaviour:
         assert "created" in result.output.lower() or "Build rocket" in result.output
 
     def test_task_get_tool(self, team_manager: TeamManager):
-        from mewcode.team.tools.task_create import TaskCreateTool
-        from mewcode.team.tools.task_get import TaskGetTool
+        from cccode.team.tools.task_create import TaskCreateTool
+        from cccode.team.tools.task_get import TaskGetTool
         asyncio.run(team_manager.create("Apollo"))
         create_tool = TaskCreateTool(team_manager)
         asyncio.run(create_tool.execute({
@@ -488,7 +488,7 @@ class TestToolBehaviour:
         assert "Test task" in result.output
 
     def test_task_list_tool(self, team_manager: TeamManager):
-        from mewcode.team.tools.task_list import TaskListTool
+        from cccode.team.tools.task_list import TaskListTool
         asyncio.run(team_manager.create("Apollo"))
         tool = TaskListTool(team_manager)
         # Empty team, empty tasks
@@ -497,8 +497,8 @@ class TestToolBehaviour:
         assert result.is_error is False or "matching" in result.output.lower()
 
     def test_task_update_tool(self, team_manager: TeamManager):
-        from mewcode.team.tools.task_create import TaskCreateTool
-        from mewcode.team.tools.task_update import TaskUpdateTool
+        from cccode.team.tools.task_create import TaskCreateTool
+        from cccode.team.tools.task_update import TaskUpdateTool
         asyncio.run(team_manager.create("Apollo"))
         create_tool = TaskCreateTool(team_manager)
         asyncio.run(create_tool.execute({
@@ -517,7 +517,7 @@ class TestToolBehaviour:
         assert "updated" in result.output.lower()
 
     def test_send_message_tool(self, team_manager: TeamManager, registry: AgentNameRegistry):
-        from mewcode.team.tools.send_message import SendMessageTool
+        from cccode.team.tools.send_message import SendMessageTool
         asyncio.run(team_manager.create("Apollo"))
         tool = SendMessageTool(team_manager, registry=registry, current_member="lead")
         result = asyncio.run(tool.execute({
@@ -529,7 +529,7 @@ class TestToolBehaviour:
         assert "delivered_to" in result.output.lower() or "delivered" in result.output.lower()
 
     def test_team_delete_tool(self, team_manager: TeamManager):
-        from mewcode.team.tools.team_delete import TeamDeleteTool
+        from cccode.team.tools.team_delete import TeamDeleteTool
         asyncio.run(team_manager.create("Apollo"))
         tool = TeamDeleteTool(team_manager)
         result = asyncio.run(tool.execute({"name": "apollo"}))
@@ -602,31 +602,31 @@ class TestInProcessBackend:
 class TestCoordinator:
     def test_is_enabled_false_by_default(self):
         # Ensure env var is not set
-        old = os.environ.pop("MEWCODE_COORDINATOR_MODE", None)
+        old = os.environ.pop("CCCODE_COORDINATOR_MODE", None)
         try:
-            from mewcode.coordinator import is_enabled
+            from cccode.coordinator import is_enabled
             assert is_enabled() is False
         finally:
             if old is not None:
-                os.environ["MEWCODE_COORDINATOR_MODE"] = old
+                os.environ["CCCODE_COORDINATOR_MODE"] = old
 
     def test_is_enabled_true_with_env(self):
-        os.environ["MEWCODE_COORDINATOR_MODE"] = "1"
+        os.environ["CCCODE_COORDINATOR_MODE"] = "1"
         try:
-            from mewcode.coordinator import is_enabled
+            from cccode.coordinator import is_enabled
             assert is_enabled() is True
         finally:
-            del os.environ["MEWCODE_COORDINATOR_MODE"]
+            del os.environ["CCCODE_COORDINATOR_MODE"]
 
     def test_filter_tool_names_allows_core(self):
-        from mewcode.coordinator import filter_tool_names
+        from cccode.coordinator import filter_tool_names
         allowed = filter_tool_names(["Agent", "read_file", "bash", "glob", "grep"])
         assert "Agent" in allowed
         assert "read_file" in allowed
         assert "bash" in allowed
 
     def test_filter_tool_names_blocks_writes(self):
-        from mewcode.coordinator import filter_tool_names
+        from cccode.coordinator import filter_tool_names
         # edit_file and write_file_tool should be dropped
         result = filter_tool_names(["edit_file", "write_file", "write_file_tool", "read_file"])
         assert "edit_file" not in result
@@ -635,13 +635,13 @@ class TestCoordinator:
         assert "read_file" in result
 
     def test_filter_tool_names_includes_team_tools(self):
-        from mewcode.coordinator import filter_tool_names
+        from cccode.coordinator import filter_tool_names
         result = filter_tool_names(TEAM_TOOL_NAMES)
         for tool_name in TEAM_TOOL_NAMES:
             assert tool_name in result
 
     def test_system_prompt_suffix_non_empty(self):
-        from mewcode.coordinator import system_prompt_suffix
+        from cccode.coordinator import system_prompt_suffix
         text = system_prompt_suffix()
         assert len(text) > 0
         assert "coordinator" in text.lower()

@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mewcode.commands.registry import Command, CommandContext, CommandRegistry
-from mewcode.commands.parser import parse_command, complete
-from mewcode.commands.handlers import register_all_commands
+from cccode.commands.registry import Command, CommandContext, CommandRegistry
+from cccode.commands.parser import parse_command, complete
+from cccode.commands.handlers import register_all_commands
 
 
 # ── Helpers ──────────────────────────────────
@@ -206,7 +206,7 @@ class TestComplete:
 class TestHelpHandler:
     @pytest.mark.asyncio
     async def test_help_lists_all(self):
-        from mewcode.commands.handlers.help import handle_help
+        from cccode.commands.handlers.help import handle_help
         reg = CommandRegistry()
         register_all_commands(reg)
         ui = MockUI()
@@ -217,7 +217,7 @@ class TestHelpHandler:
 
     @pytest.mark.asyncio
     async def test_help_specific_command(self):
-        from mewcode.commands.handlers.help import handle_help
+        from cccode.commands.handlers.help import handle_help
         reg = CommandRegistry()
         register_all_commands(reg)
         ui = MockUI()
@@ -232,7 +232,7 @@ class TestHelpHandler:
 class TestPlanDoHandlers:
     @pytest.mark.asyncio
     async def test_plan_mode(self):
-        from mewcode.commands.handlers.plan import handle_plan
+        from cccode.commands.handlers.plan import handle_plan
         ui = MockUI()
         ctx = _make_ctx(ui=ui)
         await handle_plan(ctx)
@@ -240,7 +240,7 @@ class TestPlanDoHandlers:
 
     @pytest.mark.asyncio
     async def test_plan_with_args(self):
-        from mewcode.commands.handlers.plan import handle_plan
+        from cccode.commands.handlers.plan import handle_plan
         ui = MockUI()
         ctx = _make_ctx(args="设计登录模块", ui=ui)
         await handle_plan(ctx)
@@ -249,7 +249,7 @@ class TestPlanDoHandlers:
 
     @pytest.mark.asyncio
     async def test_do_default(self):
-        from mewcode.commands.handlers.do import handle_do
+        from cccode.commands.handlers.do import handle_do
         ui = MockUI()
         ctx = _make_ctx(ui=ui)
         await handle_do(ctx)
@@ -257,7 +257,7 @@ class TestPlanDoHandlers:
 
     @pytest.mark.asyncio
     async def test_do_yolo(self):
-        from mewcode.commands.handlers.do import handle_do
+        from cccode.commands.handlers.do import handle_do
         ui = MockUI()
         mock_agent = MagicMock()
         ctx = _make_ctx(args="yolo", ui=ui, agent=mock_agent)
@@ -270,7 +270,7 @@ class TestPlanDoHandlers:
 class TestSkillHandler:
     @pytest.mark.asyncio
     async def test_skill_list_no_loader(self):
-        from mewcode.commands.handlers.skill import handle_skill
+        from cccode.commands.handlers.skill import handle_skill
         ui = MockUI()
         ctx = _make_ctx(ui=ui)
         await handle_skill(ctx)
@@ -278,7 +278,7 @@ class TestSkillHandler:
 
     @pytest.mark.asyncio
     async def test_skill_list_empty(self):
-        from mewcode.commands.handlers.skill import handle_skill
+        from cccode.commands.handlers.skill import handle_skill
         ui = MockUI()
         loader = MagicMock()
         loader.list_skills.return_value = []
@@ -292,7 +292,7 @@ class TestSkillHandler:
 class TestStatusHandler:
     @pytest.mark.asyncio
     async def test_status_output(self):
-        from mewcode.commands.handlers.status import handle_status
+        from cccode.commands.handlers.status import handle_status
         ui = MockUI()
         mock_agent = MagicMock()
         mock_agent.permission_mode = MagicMock()
@@ -308,7 +308,7 @@ class TestStatusHandler:
 class TestSessionHandler:
     @pytest.mark.asyncio
     async def test_session_no_manager(self):
-        from mewcode.commands.handlers.session import handle_session
+        from cccode.commands.handlers.session import handle_session
         ui = MockUI()
         ctx = _make_ctx(ui=ui, session_manager=None)
         await handle_session(ctx)
@@ -316,7 +316,7 @@ class TestSessionHandler:
 
     @pytest.mark.asyncio
     async def test_session_list_empty(self):
-        from mewcode.commands.handlers.session import handle_session
+        from cccode.commands.handlers.session import handle_session
         ui = MockUI()
         mock_mgr = MagicMock()
         mock_mgr.list.return_value = []
@@ -330,7 +330,7 @@ class TestSessionHandler:
 class TestMemoryHandler:
     @pytest.mark.asyncio
     async def test_memory_no_manager(self):
-        from mewcode.commands.handlers.memory import handle_memory
+        from cccode.commands.handlers.memory import handle_memory
         ui = MockUI()
         ctx = _make_ctx(ui=ui, memory_manager=None)
         await handle_memory(ctx)
@@ -338,7 +338,7 @@ class TestMemoryHandler:
 
     @pytest.mark.asyncio
     async def test_memory_clear(self):
-        from mewcode.commands.handlers.memory import handle_memory
+        from cccode.commands.handlers.memory import handle_memory
         ui = MockUI()
         mock_mgr = MagicMock()
         ctx = _make_ctx(args="clear", ui=ui, memory_manager=mock_mgr)
@@ -348,7 +348,7 @@ class TestMemoryHandler:
 
     @pytest.mark.asyncio
     async def test_memory_invalid_subcmd(self):
-        from mewcode.commands.handlers.memory import handle_memory
+        from cccode.commands.handlers.memory import handle_memory
         ui = MockUI()
         mock_mgr = MagicMock()
         ctx = _make_ctx(args="invalid", ui=ui, memory_manager=mock_mgr)

@@ -6,10 +6,10 @@
 
 ### 1.1 常量与 session 助手
 
-- [ ] `SINGLE_RESULT_CHAR_LIMIT = 5_000` 在 `mewcode/context/manager.py:16` 定义。
+- [ ] `SINGLE_RESULT_CHAR_LIMIT = 5_000` 在 `cccode/context/manager.py:16` 定义。
 - [ ] `AGGREGATE_CHAR_LIMIT = 20_000`、`PREVIEW_CHARS = 2_000`、`KEEP_RECENT_TURNS = 10`、`OLD_RESULT_SNIP_CHARS = 2_000`、`SNIPPED_TAG = "<snipped>"` 在 `manager.py:17-22` 定义。
-- [ ] `SUMMARY_OUTPUT_RESERVE = 20_000`、`AUTO_COMPACT_SAFETY_MARGIN = 13_000`、`MANUAL_COMPACT_SAFETY_MARGIN = 3_000`、`PERSISTED_TAG = "<persisted-output>"`、`SESSION_SUBDIR = ".mewcode/session/tool-results"` 在 `manager.py:24-30` 定义。
-- [ ] `ensure_session_dir(work_dir) -> Path` 在 `manager.py:132` 实现：创建并返回 `Path("<work_dir>/.mewcode/session/tool-results")`，`mkdir(parents=True, exist_ok=True)`。
+- [ ] `SUMMARY_OUTPUT_RESERVE = 20_000`、`AUTO_COMPACT_SAFETY_MARGIN = 13_000`、`MANUAL_COMPACT_SAFETY_MARGIN = 3_000`、`PERSISTED_TAG = "<persisted-output>"`、`SESSION_SUBDIR = ".cccode/session/tool-results"` 在 `manager.py:24-30` 定义。
+- [ ] `ensure_session_dir(work_dir) -> Path` 在 `manager.py:132` 实现：创建并返回 `Path("<work_dir>/.cccode/session/tool-results")`，`mkdir(parents=True, exist_ok=True)`。
 - [ ] `cleanup_tool_results(session_dir)` 在 `manager.py:138` 实现：`shutil.rmtree` + 重建空目录。
 
 ### 1.2 状态容器与 transcript
@@ -50,12 +50,12 @@
 
 ### 1.5 Anthropic 缓存断点
 
-- [ ] `_EPHEMERAL = {"type": "ephemeral"}` 在 `mewcode/client.py:24` 定义。
+- [ ] `_EPHEMERAL = {"type": "ephemeral"}` 在 `cccode/client.py:24` 定义。
 - [ ] `_mark_last_user_tail_for_cache(messages)` 在 `client.py:27-52` 实现：倒序找最后一条 user message，对其末块（string content 自动 up-convert 成 block 列表）打 marker。
 - [ ] `_mark_last_tool_for_cache(tools)` 在 `client.py:55-68` 实现：返回浅拷贝并给末项加 marker。
 - [ ] `AnthropicLLMClient.stream` 在请求构造期间打三处 cache marker（`client.py:138-160`）：`messages` 构造后调 `_mark_last_user_tail_for_cache(messages)`；`system` 包装成 `[{"type":"text","text":system,"cache_control":_EPHEMERAL}]`；`tools` 经 `_mark_last_tool_for_cache` 处理后赋给 `kwargs["tools"]`。
 
-### 1.6 `RecoveryState` 与恢复块（同样在 `mewcode/context/manager.py`）
+### 1.6 `RecoveryState` 与恢复块（同样在 `cccode/context/manager.py`）
 
 - [ ] 顶部 import 新增 `threading` 与 `time`。
 - [ ] 限额常量 `RECOVERY_FILE_LIMIT = 5` / `RECOVERY_TOKENS_PER_FILE = 5_000` / `RECOVERY_SKILLS_BUDGET = 25_000` / `RECOVERY_TOKENS_PER_SKILL = 5_000` / `_RECOVERY_CHARS_PER_TOKEN = 3.5` 在「Post-compact recovery state」段定义。
@@ -66,7 +66,7 @@
 - [ ] `build_recovery_attachment(state, tool_schemas)` 依次输出 `## 最近读过的文件 / ## 已激活的技能 / ## 可用工具 / ## 提示`；空 state + 空 schemas 时返回 `""`；技能预算超 `RECOVERY_SKILLS_BUDGET` 时停止追加。
 - [ ] `build_compact_messages(summary, attachment="")` 把 `attachment` 用 `\n\n---\n\n` 拼到 `[摘要]\n{summary}` user 消息之后。
 - [ ] `auto_compact` 多两个 kwargs `recovery: RecoveryState | None = None`、`tool_schemas: list[Mapping[str, Any]] | None = None`，在 `extract_summary` 后调 `build_recovery_attachment` 再传给 `build_compact_messages`。
-- [ ] `mewcode/context/__init__.py` re-export `RecoveryState / FileReadRecord / SkillInvocationRecord / build_recovery_attachment`。
+- [ ] `cccode/context/__init__.py` re-export `RecoveryState / FileReadRecord / SkillInvocationRecord / build_recovery_attachment`。
 
 ### 1.7 Agent / Skill 接入
 
@@ -78,31 +78,31 @@
 
 ## 2. 接入完整性（必查，杜绝死代码）
 
-- [ ] `grep -rn "from mewcode.context" mewcode --include="*.py" | grep -v "context/"` 至少 1 处导入：
-  - `mewcode/agent.py:15-27`（导入 `CompactCircuitBreaker / CompactEvent / ContentReplacementRecord / ContentReplacementState / append_replacement_records / apply_tool_result_budget / auto_compact / create_replacement_state / ensure_session_dir / load_replacement_records / reconstruct_replacement_state`）。
-- [ ] `grep -rn "apply_tool_result_budget\|auto_compact\|manual_compact\|clone_replacement_state" mewcode --include="*.py"` 命中：
-  - `mewcode/agent.py:316`（`Agent.__init__` 初始化 `replacement_state`）
-  - `mewcode/agent.py:510`（主循环调 `apply_tool_result_budget`）
-  - `mewcode/agent.py:998`（另一主循环变体调 `apply_tool_result_budget`）
-  - `mewcode/agent.py` 中 `manual_compact` 调 `auto_compact(..., manual=True)`
-  - `mewcode/commands/handlers/compact.py`（`/compact` 命令调 `ctx.agent.manual_compact`）
-  - `mewcode/tools/agent_tool.py:200-203`（fork 调 `clone_replacement_state` 注入子 Agent）
-- [ ] `grep -rn "RecoveryState\b\|recovery_state" mewcode --include="*.py"` 命中：
-  - `mewcode/context/manager.py` 定义。
-  - `mewcode/context/__init__.py` re-export。
-  - `mewcode/agent.py`：`Agent.__init__` 初始化 + 三处 `auto_compact` kwarg + `_snapshot_for_recovery` 方法 + 两处 `_execute_*` 调用。
-  - `mewcode/skills/executor.py`：`execute_inline` / `execute_fork` 各一处 `record_skill_invocation`。
+- [ ] `grep -rn "from cccode.context" cccode --include="*.py" | grep -v "context/"` 至少 1 处导入：
+  - `cccode/agent.py:15-27`（导入 `CompactCircuitBreaker / CompactEvent / ContentReplacementRecord / ContentReplacementState / append_replacement_records / apply_tool_result_budget / auto_compact / create_replacement_state / ensure_session_dir / load_replacement_records / reconstruct_replacement_state`）。
+- [ ] `grep -rn "apply_tool_result_budget\|auto_compact\|manual_compact\|clone_replacement_state" cccode --include="*.py"` 命中：
+  - `cccode/agent.py:316`（`Agent.__init__` 初始化 `replacement_state`）
+  - `cccode/agent.py:510`（主循环调 `apply_tool_result_budget`）
+  - `cccode/agent.py:998`（另一主循环变体调 `apply_tool_result_budget`）
+  - `cccode/agent.py` 中 `manual_compact` 调 `auto_compact(..., manual=True)`
+  - `cccode/commands/handlers/compact.py`（`/compact` 命令调 `ctx.agent.manual_compact`）
+  - `cccode/tools/agent_tool.py:200-203`（fork 调 `clone_replacement_state` 注入子 Agent）
+- [ ] `grep -rn "RecoveryState\b\|recovery_state" cccode --include="*.py"` 命中：
+  - `cccode/context/manager.py` 定义。
+  - `cccode/context/__init__.py` re-export。
+  - `cccode/agent.py`：`Agent.__init__` 初始化 + 三处 `auto_compact` kwarg + `_snapshot_for_recovery` 方法 + 两处 `_execute_*` 调用。
+  - `cccode/skills/executor.py`：`execute_inline` / `execute_fork` 各一处 `record_skill_invocation`。
 - [ ] 调用入口位于 `Agent` 主循环（`agent.py:510` 在 `Agent.run` 的 `while iteration <= self.max_iterations` 循环内、`client.stream` 调用之前）。
-- [ ] 命令注册中心已更新: `COMPACT_COMMAND` 在 `mewcode/commands/handlers/__init__.py` 导出，由 registry 注册到 `/compact` + 别名 `/c`。
+- [ ] 命令注册中心已更新: `COMPACT_COMMAND` 在 `cccode/commands/handlers/__init__.py` 导出，由 registry 注册到 `/compact` + 别名 `/c`。
 - [ ] 用户输入到本模块的路径可一句话描述:
   - 自动: agent 主循环新一轮 → `auto_compact` 阈值判断 → 写入 reminder → `apply_tool_result_budget` 产出 api_conv → `client.stream(api_conv, ...)`。
   - 手动: 用户在 TUI 输入 `/compact` → `handle_compact` → `Agent.manual_compact` → `auto_compact(..., manual=True)` → 回传 `CompactNotification | ErrorEvent`。
   - Fork: 父 Agent 调 Agent 工具触发 fork → `agent_tool.py` 创建 sub_agent → 注入父 state 的 `clone_replacement_state` → 子 Agent 用克隆状态独立演化。
-- [ ] **死代码核查**：所有公开符号都在被引用：`ContentReplacementState / ContentReplacementRecord / create_replacement_state / clone_replacement_state / reconstruct_replacement_state / append_replacement_records / load_replacement_records / apply_tool_result_budget / auto_compact / compute_compact_threshold / should_auto_compact / extract_summary / build_compact_messages / make_persisted_preview / persist_tool_result / CompactCircuitBreaker / CompactEvent / ensure_session_dir / cleanup_tool_results` 全部在 `mewcode/context/__init__.py` 导出且被外部模块或测试引用。
+- [ ] **死代码核查**：所有公开符号都在被引用：`ContentReplacementState / ContentReplacementRecord / create_replacement_state / clone_replacement_state / reconstruct_replacement_state / append_replacement_records / load_replacement_records / apply_tool_result_budget / auto_compact / compute_compact_threshold / should_auto_compact / extract_summary / build_compact_messages / make_persisted_preview / persist_tool_result / CompactCircuitBreaker / CompactEvent / ensure_session_dir / cleanup_tool_results` 全部在 `cccode/context/__init__.py` 导出且被外部模块或测试引用。
 
 ## 3. 编译与测试
 
-- [ ] `ruff check mewcode/context mewcode/commands/handlers/compact.py mewcode/client.py mewcode/agent.py mewcode/tools/agent_tool.py` 通过。
+- [ ] `ruff check cccode/context cccode/commands/handlers/compact.py cccode/client.py cccode/agent.py cccode/tools/agent_tool.py` 通过。
 - [ ] `PYTHONPATH=. pytest tests/test_context.py tests/test_replacement_state.py tests/test_recovery.py -v` 全部通过：
   - `TestPersistToolResult / TestMakePersistedPreview / TestApplyToolResultBudget`（4 case，已更新为 Design B）/ `TestComputeCompactThreshold / TestShouldAutoCompact / TestExtractSummary / TestCompactCircuitBreaker / TestBuildCompactMessages / TestSessionDir`（已有）。
   - `test_create_returns_empty / test_clone_independent / test_apply_does_not_mutate_conv / test_first_call_freezes_unreplaced / test_replacement_byte_identical / test_frozen_never_replaced / test_aggregate_only_picks_fresh / test_reconstruct_from_records / test_reconstruct_with_inherited_parent / test_append_and_load_records_roundtrip`（10 个新增）。
@@ -116,8 +116,8 @@
 - [ ] Layer 1 frozen 不再替换：`test_frozen_never_replaced` 验证「第一轮未替换的 id 在后续轮即使聚合超限也不被选中」。
 - [ ] Layer 2 触发：制造长对话使 `last_input_tokens >= 167_000`（200K 窗口）→ 主循环自动触发 Layer 2，事件流出现 `CompactNotification(before_tokens=...)`，对话被替换为 `[摘要] + 边界消息` 两条。
 - [ ] Layer 2 熔断：人为让 `auto_compact` 连续失败 3 次后第 4 次直接返回错误字符串不发请求。
-- [ ] Spill 落盘：长 Bash 输出后 `<work_dir>/.mewcode/session/tool-results/` 目录下出现以 `<tool_use_id>.txt` 命名的文件。
-- [ ] Transcript 落盘：`<work_dir>/.mewcode/session/replacement_records.jsonl` 出现新条目，`jq .` 可解析。
+- [ ] Spill 落盘：长 Bash 输出后 `<work_dir>/.cccode/session/tool-results/` 目录下出现以 `<tool_use_id>.txt` 命名的文件。
+- [ ] Transcript 落盘：`<work_dir>/.cccode/session/replacement_records.jsonl` 出现新条目，`jq .` 可解析。
 - [ ] Fork 隔离：fork 出去的子 Agent 修改自己 state 的 seen_ids / replacements 不影响父 Agent。
 - [ ] 短会话下在 TUI 输入 `/compact`，看到 `当前 token 数 X，无需压缩`（input_tokens < 5000 分支）。
 - [ ] 长会话下在 TUI 输入 `/compact`，看到 `上下文已压缩（压缩前 X tokens）`（`CompactNotification` 渲染）。

@@ -3,7 +3,7 @@
 > 任务粒度: 每个任务可在一次会话内完成，可独立交付。所有 T 任务完成后逐项勾上，每条任务记录实际落地的文件与行号。
 
 ## T1: 项目指令 `@include` 递归展开
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/instructions.py:9-46`（`process_includes`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/instructions.py:9-46`（`process_includes`）
 - 依赖任务: 无
 - 完成标准:
   - `MAX_INCLUDE_DEPTH=5` 与 `INCLUDE_PREFIX="@include "` 常量到位
@@ -15,17 +15,17 @@
   - 测试 `TestProcessIncludes` 5 个用例（无 include / 基本 include / 递归 include / depth 限制 / path 越界 / 文件不存在）全部命中
 
 ## T2: 项目指令三层加载
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/instructions.py:48-66`（`load_instructions`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/instructions.py:48-66`（`load_instructions`）
 - 依赖任务: T1
 - 完成标准:
-  - 三层优先级顺序：`<root>/MEWCODE.md` → `<root>/.mewcode/MEWCODE.md` → `~/.mewcode/MEWCODE.md`
+  - 三层优先级顺序：`<root>/CCCODE.md` → `<root>/.cccode/CCCODE.md` → `~/.cccode/CCCODE.md`
   - 每层文件存在且 is_file 时读取并对其内容跑 `process_includes(content, path.parent, root)`
   - 多段用 `\n---\n` join
   - 无任何文件存在时返回 `""`
   - 测试 `TestLoadInstructions`（`test_single_layer / test_multi_layer_priority / test_no_files_returns_empty`）通过
 
 ## T3: SessionRecord 序列化
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/session.py:30-119`（`RecordType / SessionRecord`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/session.py:30-119`（`RecordType / SessionRecord`）
 - 依赖任务: 无
 - 完成标准:
   - `RecordType(str, Enum)` 5 个值：`system_prompt / user / assistant / tool_result / compression`
@@ -36,7 +36,7 @@
   - 测试 `TestSessionRecord` 5 个用例（user roundtrip / assistant with tool_uses / tool_results multiple records / malformed jsonl / plain assistant）通过
 
 ## T4: 记录 ↔ 消息互转 + 链路校验
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/session.py:122-222`（`records_to_messages / validate_message_chain`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/session.py:122-222`（`records_to_messages / validate_message_chain`）
 - 依赖任务: T3
 - 完成标准:
   - `records_to_messages`：维护 `pending_tool_results` 队列，遇到非 tool_result 记录前先把队列冲到一条 user message 的 `tool_results`；system_prompt 跳过；compression 渲染为 `[摘要]\n<content>` 的 user message；assistant content list 时拆 text + tool_uses
@@ -44,7 +44,7 @@
   - 测试 `TestRecordsToMessages`（3 个）+ `TestValidateMessageChain`（3 个）全部通过
 
 ## T5: SessionMeta 落盘 + Session 句柄
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/session.py:225-307`（`SessionMeta / Session / ResumeResult`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/session.py:225-307`（`SessionMeta / Session / ResumeResult`）
 - 依赖任务: T3
 - 完成标准:
   - `SessionMeta` dataclass 7 字段（id / title / summary / message_count / total_tokens / created_at / last_active），`created_at / last_active` 默认 `datetime.now(timezone.utc)`
@@ -57,11 +57,11 @@
   - 测试 `TestSession`（2 个：append 写 jsonl + title 设置）通过
 
 ## T6: SessionManager 生命周期
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/session.py:384-482`（`_generate_session_id / SessionManager`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/session.py:384-482`（`_generate_session_id / SessionManager`）
 - 依赖任务: T4, T5
 - 完成标准:
   - `_generate_session_id()`：`session_<YYYYMMDD_HHMMSS>_<4 字符 a-z0-9>` 格式
-  - `SessionManager.__init__(work_dir)`：构造 `<work_dir>/.mewcode/sessions/` 并 `mkdir(parents=True, exist_ok=True)`
+  - `SessionManager.__init__(work_dir)`：构造 `<work_dir>/.cccode/sessions/` 并 `mkdir(parents=True, exist_ok=True)`
   - `create()`：新 ID + 写 `.meta` + 打开 jsonl `mode="a"` + 返回 `Session`
   - `list()`：扫 `*.meta`、`SessionMeta.load` 反序列化、按 `last_active` 倒序
   - `resume(id)`：jsonl 缺失返回 None；逐行 `from_jsonl` 跳空跳错；`validate_message_chain` 截断；`records_to_messages` 重建；重新打开 jsonl `mode="a"` 续写
@@ -70,7 +70,7 @@
   - 测试 `TestSessionManager`（create_and_list / delete / cleanup / generates_valid_id）+ `TestSessionResume`（restores_messages / nonexistent / truncates_incomplete_chain）通过
 
 ## T7: 断会话时长提示
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/session.py:358-380`（`build_time_gap_message`）+ `TIME_GAP_THRESHOLD` 常量
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/session.py:358-380`（`build_time_gap_message`）+ `TIME_GAP_THRESHOLD` 常量
 - 依赖任务: 无
 - 完成标准:
   - `TIME_GAP_THRESHOLD=timedelta(hours=24)` 常量
@@ -80,7 +80,7 @@
   - 测试 `TestTimeGapMessage`（no gap returns none / gap returns message）通过
 
 ## T8: 会话摘要生成（可选）
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/session.py:316-355`（`generate_session_summary`）+ `SESSION_SUMMARY_PROMPT`
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/session.py:316-355`（`generate_session_summary`）+ `SESSION_SUMMARY_PROMPT`
 - 依赖任务: 无
 - 完成标准:
   - `SESSION_SUMMARY_PROMPT` 文本到位（要求一句话总结、不调用工具）
@@ -88,17 +88,17 @@
   - 不做单独单元测试（集成在 App 的异步 summary 更新中）
 
 ## T9: MemoryManager 双路径基础
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/auto_memory.py:8-71`（常量 + `__init__ / user_path / project_path / load`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/auto_memory.py:8-71`（常量 + `__init__ / user_path / project_path / load`）
 - 依赖任务: 无
 - 完成标准:
-  - 常量：`USER_MEMORIES_RELPATH = ".mewcode/memories.md"` / `PROJECT_MEMORIES_RELPATH = ".mewcode/memories.md"`
+  - 常量：`USER_MEMORIES_RELPATH = ".cccode/memories.md"` / `PROJECT_MEMORIES_RELPATH = ".cccode/memories.md"`
   - `__init__`：算 `_user_path = Path.home() / USER_MEMORIES_RELPATH` 与 `_project_path = Path(project_root) / PROJECT_MEMORIES_RELPATH`，`_last_extraction_msg_count = 0`
   - `user_path / project_path` property 暴露
   - `load()`：两个路径若存在且非空，`strip` 后用 `\n\n` join；都空返回 `""`
   - 测试 `TestMemoryManager.test_load_empty / test_load_merges_user_and_project` 通过
 
 ## T10: MEMORY_EXTRACTION_PROMPT + extract LLM 跑提取
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/auto_memory.py:11-37, 72-127`（`MEMORY_EXTRACTION_PROMPT / extract`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/auto_memory.py:11-37, 72-127`（`MEMORY_EXTRACTION_PROMPT / extract`）
 - 依赖任务: T9
 - 完成标准:
   - prompt 含 4 类分类标题（用户偏好 / 纠正反馈 / 项目知识 / 参考资料）、`不要重复添加` / `不要写任何条目，不要写占位符` / `不要调用任何工具` 等关键 marker
@@ -113,7 +113,7 @@
   - 测试 `TestMemoryExtraction.test_extraction_prompt_contains_categories` 通过
 
 ## T11: `_write_memories` 分流 + 占位过滤
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/auto_memory.py:39-40, 128-190`（`_USER_LEVEL_HEADERS / _PROJECT_LEVEL_HEADERS / _write_memories / _is_placeholder / _assign_section`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/auto_memory.py:39-40, 128-190`（`_USER_LEVEL_HEADERS / _PROJECT_LEVEL_HEADERS / _write_memories / _is_placeholder / _assign_section`）
 - 依赖任务: T10
 - 完成标准:
   - `_USER_LEVEL_HEADERS = {"用户偏好", "纠正反馈"}` / `_PROJECT_LEVEL_HEADERS = {"项目知识", "参考资料"}`
@@ -123,20 +123,20 @@
   - 测试 `TestMemoryManager.test_write_memories_splits_correctly` 通过
 
 ## T12: clear + get_display_text
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/auto_memory.py:191-213`（`clear / get_display_text`）
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/auto_memory.py:191-213`（`clear / get_display_text`）
 - 依赖任务: T9
 - 完成标准:
   - `clear()`：两路径若存在 `write_text("")` 截断（不删文件）
   - `get_display_text()`：两路径分别按 `[用户级] <path>\n<content>` / `[项目级] ...` 渲染、`\n\n` 拼接；都空返回 `"当前没有任何自动记忆。"`
   - 测试 `TestMemoryManager.test_clear / test_get_display_text_empty` 通过
 
-## T13: `mewcode/memory/__init__.py` 统一 re-export
-- 影响文件: `/Users/codemelo/mewcode/mewcode/memory/__init__.py:1-26`
+## T13: `cccode/memory/__init__.py` 统一 re-export
+- 影响文件: `/Users/codemelo/cccode/cccode/memory/__init__.py:1-26`
 - 依赖任务: T1-T12
-- 完成标准: 通过 `from mewcode.memory.auto_memory import MemoryManager` / `from mewcode.memory.instructions import load_instructions, process_includes` / `from mewcode.memory.session import (ResumeResult, Session, SessionManager, SessionMeta, SessionRecord, build_time_gap_message, generate_session_summary, validate_message_chain)` 集中暴露，`__all__` 列表与导入一一对应
+- 完成标准: 通过 `from cccode.memory.auto_memory import MemoryManager` / `from cccode.memory.instructions import load_instructions, process_includes` / `from cccode.memory.session import (ResumeResult, Session, SessionManager, SessionMeta, SessionRecord, build_time_gap_message, generate_session_summary, validate_message_chain)` 集中暴露，`__all__` 列表与导入一一对应
 
 ## T14: ConversationManager 注入面板
-- 影响文件: `/Users/codemelo/mewcode/mewcode/conversation.py:41, 75-113`（`ltm_injected` 字段 + `inject_environment / inject_long_term_memory / replace_history`）
+- 影响文件: `/Users/codemelo/cccode/cccode/conversation.py:41, 75-113`（`ltm_injected` 字段 + `inject_environment / inject_long_term_memory / replace_history`）
 - 依赖任务: 无
 - 完成标准:
   - `ltm_injected` 默认 False 的 init=False 字段
@@ -145,7 +145,7 @@
   - 测试 `TestConversationInjection` 6 个用例（带 env / 幂等 / instructions only / memories only / 全空 / replace 重置）全部通过
 
 ## T15: Agent 钩入 + 自动提取
-- 影响文件: `/Users/codemelo/mewcode/mewcode/agent.py:49, 295, 313-315, 404-405, 453-454, 564-568, 870-883, 902-904, 924-926`（`MEMORY_EXTRACTION_INTERVAL / __init__ / run 入口注入 / loop 收尾触发 / _extract_memories / manual_compact 二次注入 / run_to_completion 注入`）
+- 影响文件: `/Users/codemelo/cccode/cccode/agent.py:49, 295, 313-315, 404-405, 453-454, 564-568, 870-883, 902-904, 924-926`（`MEMORY_EXTRACTION_INTERVAL / __init__ / run 入口注入 / loop 收尾触发 / _extract_memories / manual_compact 二次注入 / run_to_completion 注入`）
 - 依赖任务: T9, T14
 - 完成标准:
   - 模块常量 `MEMORY_EXTRACTION_INTERVAL = 5`
@@ -157,7 +157,7 @@
   - 测试：`tests/test_memory.py` 不直接 cover Agent 触发，靠集成验证；新增 `test_loop_count_triggers_extract` 若有需要
 
 ## T16: `/memory` 命令
-- 影响文件: `/Users/codemelo/mewcode/mewcode/commands/handlers/memory.py:1-46`（`handle_memory / MEMORY_COMMAND`）
+- 影响文件: `/Users/codemelo/cccode/cccode/commands/handlers/memory.py:1-46`（`handle_memory / MEMORY_COMMAND`）
 - 依赖任务: T9, T12
 - 完成标准:
   - `handle_memory(ctx)` 空子命令 → `get_display_text`；`list` → 同上；`clear` → `MemoryManager.clear` + 提示「所有自动记忆已清空。」；`edit` → 打印 user_path / project_path 两行路径；未知子命令 → `usage`
@@ -165,7 +165,7 @@
   - `ctx.memory_manager is None` 时打印「记忆管理器未初始化」并 return
 
 ## T17: `/session` 命令
-- 影响文件: `/Users/codemelo/mewcode/mewcode/commands/handlers/session.py`（`handle_session`）
+- 影响文件: `/Users/codemelo/cccode/cccode/commands/handlers/session.py`（`handle_session`）
 - 依赖任务: T5, T6, T7
 - 完成标准:
   - 空子命令打印当前 session meta 摘要（id / title / 消息 / token / 最后活跃）
@@ -176,10 +176,10 @@
   - `delete <id>` 拒绝缺 ID 的调用
 
 ## T18: 接入主流程（App 启动 + 命令上下文）
-- 影响文件: `/Users/codemelo/mewcode/mewcode/app.py:51-58, 550-558, 633-660, 873-881, 1063-1070, 1167-1175, 1228-1245, 1474-1495, 1564-1575, 1605-1615`
+- 影响文件: `/Users/codemelo/cccode/cccode/app.py:51-58, 550-558, 633-660, 873-881, 1063-1070, 1167-1175, 1228-1245, 1474-1495, 1564-1575, 1605-1615`
 - 依赖任务: T1-T17
 - 完成标准:
-  - App 顶部 `from mewcode.memory import (MemoryManager, Session, SessionManager, ..., generate_session_summary, load_instructions)`
+  - App 顶部 `from cccode.memory import (MemoryManager, Session, SessionManager, ..., generate_session_summary, load_instructions)`
   - `__init__` 持字段：`self.session_manager / self.session / self.memory_manager / self._instructions_content`
   - 启动期：`self._instructions_content = load_instructions(work_dir)` / `self.memory_manager = MemoryManager(work_dir)` / `self.session_manager = SessionManager(work_dir)` / `self.session_manager.cleanup()` / `self.session = self.session_manager.create()`
   - `Agent(...)` 构造点透传 `instructions_content=self._instructions_content` 与 `memory_manager=self.memory_manager`
@@ -192,13 +192,13 @@
 - 影响文件: 无（仅运行验证）
 - 依赖任务: T18
 - 完成标准:
-  - `ruff check mewcode/memory/ mewcode/agent.py mewcode/conversation.py mewcode/commands/handlers/memory.py mewcode/commands/handlers/session.py` 无错误
+  - `ruff check cccode/memory/ cccode/agent.py cccode/conversation.py cccode/commands/handlers/memory.py cccode/commands/handlers/session.py` 无错误
   - `pytest tests/test_memory.py -v` 全部通过（约 30+ 用例）
-  - 项目根放一个 `MEWCODE.md`，TUI 启动后 system prompt（或 conversation 首部）能看到「## 项目指令」block
-  - `MEWCODE.md` 含 `@include ./sub/details.md` 时能展开并加入注入
-  - TUI 发几条消息后退出，`.mewcode/sessions/` 出现 `session_*.jsonl` + `session_*.meta`；重启后 `/session list` 列出该会话；`/session resume <id>` 把对话恢复
+  - 项目根放一个 `CCCODE.md`，TUI 启动后 system prompt（或 conversation 首部）能看到「## 项目指令」block
+  - `CCCODE.md` 含 `@include ./sub/details.md` 时能展开并加入注入
+  - TUI 发几条消息后退出，`.cccode/sessions/` 出现 `session_*.jsonl` + `session_*.meta`；重启后 `/session list` 列出该会话；`/session resume <id>` 把对话恢复
   - 距上次活跃 ≥24h 的 resume 后，对话末尾出现一条「[系统提示] 距离上次会话已过去 N 小时/天。代码可能有变更，建议在操作前重新读取相关文件。」
-  - 跟 Agent 对话 5 轮后（每轮 `loop_count` 模 5 等于 0），`.mewcode/memories.md` 或 `~/.mewcode/memories.md` 出现新行；下次启动后 `## 自动记忆` block 包含该内容；`/memory list` 列出；`/memory clear` 后回到「当前没有任何自动记忆。」
+  - 跟 Agent 对话 5 轮后（每轮 `loop_count` 模 5 等于 0），`.cccode/memories.md` 或 `~/.cccode/memories.md` 出现新行；下次启动后 `## 自动记忆` block 包含该内容；`/memory list` 列出；`/memory clear` 后回到「当前没有任何自动记忆。」
 
 ## 进度
 - [ ] T1

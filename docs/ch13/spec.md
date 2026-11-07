@@ -10,9 +10,9 @@
 
 ## 3. 功能需求
 
-- F1: `AgentTool` 继承 `mewcode.tools.base.Tool`，注册到主 Agent 的 `ToolRegistry`，被 LLM 当成普通工具调用。
+- F1: `AgentTool` 继承 `cccode.tools.base.Tool`，注册到主 Agent 的 `ToolRegistry`，被 LLM 当成普通工具调用。
 - F2: 三档内建 Agent 类型 `general-purpose` / `Plan` / `Explore`，每档可定制工具黑名单、最大轮数、模型、系统提示词。
-- F3: 支持从用户级目录 `~/.mewcode/agents/*.md` 和项目级 `<work_dir>/.mewcode/agents/*.md` 加载自定义 Agent 定义；项目级覆盖用户级覆盖 builtin；Markdown frontmatter 解析为 `AgentDef`。
+- F3: 支持从用户级目录 `~/.cccode/agents/*.md` 和项目级 `<work_dir>/.cccode/agents/*.md` 加载自定义 Agent 定义；项目级覆盖用户级覆盖 builtin；Markdown frontmatter 解析为 `AgentDef`。
 - F4: 三种执行路径：sync（前台阻塞、`await sub_agent.run_to_completion()`）/ background（asyncio task，立即返回任务 ID）/ fork（fork 父对话上下文，强制后台）。
 - F5: `TaskManager` 跟踪后台子 Agent 生命周期（running / completed / failed / cancelled），完成时把任务 ID 写进 `asyncio.Queue`，主 Agent 下一轮通过 `poll_completed` 拿到，再用 `inject_task_notifications` 拼装 `<task-notification>` 注入对话。
 - F6: 四层工具过滤：MCP 直通、全局禁（`ALL_AGENT_DISALLOWED_TOOLS` 七项，含 `Agent` / `AskUserQuestion` 防递归）、custom agent（`source != "builtin"`）额外禁、background 白名单（`ASYNC_AGENT_ALLOWED_TOOLS` 16 项）、definition 级 `disallowed_tools` + `tools` 白名单。
@@ -54,13 +54,13 @@
   - Fork：扫父对话 `FORK_BOILERPLATE_TAG` 拒绝嵌套 → `copy.deepcopy(history)` 复制父对话（保 byte-exact）→ 给悬挂 `tool_use` 补 `"interrupted"` placeholder `ToolResultBlock` → 追加 `FORK_BOILERPLATE + "\n\n你的任务：\n" + task` → 工具池四层过滤 → 始终后台 → 完成走通知。
   - 团队成员：校验 team 存在 → 同 team 内自动 rename `<base>-<n>` → 解析 spec → 创建 worktree → 检测 backend → 用 `build_teammate_tools` 装配（含 `TaskCreate/TaskGet/TaskList/TaskUpdate/SendMessage` 五件套）→ in-process 走 `task_manager.launch` / pane 走 `spawn_tmux_teammate` 或 `spawn_iterm2_teammate`。
 - 调用链（模块层级）：
-  - `mewcode.app:737-747` 装配 `AgentTool` 并注册进 `registry`；`app:725-728` 实例化 `AgentLoader` 并加载所有 agents；`app:788` 把 catalog 喂给主 Agent。
+  - `cccode.app:737-747` 装配 `AgentTool` 并注册进 `registry`；`app:725-728` 实例化 `AgentLoader` 并加载所有 agents；`app:788` 把 catalog 喂给主 Agent。
   - `app:1275-1279` 在主循环里调 `task_manager.poll_completed` + `inject_task_notifications`，把后台完成的子 Agent 结果灌进对话。
   - `app:1029-1031` 在中断路径调 `task_manager.adopt_running` 把当前正在跑的对话挂为后台任务。
   - `app:790 / 794` 注册 `tasks` / `trace` 两个 slash 命令以便用户主动查看后台任务和追踪树。
 - 与其他模块的交互：
-  - 依赖 `mewcode.agent`（创建子 Agent）、`mewcode.conversation`（forked 对话）、`mewcode.tools`（注册中心 + 过滤）、`mewcode.client`（model 路由）、`mewcode.permissions`（独立 Checker）、`mewcode.worktree`（隔离）、`mewcode.teams`（团队成员）。
-  - 被 `mewcode.app` 和 `mewcode.cli` 调用。
+  - 依赖 `cccode.agent`（创建子 Agent）、`cccode.conversation`（forked 对话）、`cccode.tools`（注册中心 + 过滤）、`cccode.client`（model 路由）、`cccode.permissions`（独立 Checker）、`cccode.worktree`（隔离）、`cccode.teams`（团队成员）。
+  - 被 `cccode.app` 和 `cccode.cli` 调用。
 
 ## 6. Out of Scope
 
@@ -68,7 +68,7 @@
 - 不实现 RemoteAgent / DreamTask / LocalWorkflow / MonitorMcp 这些 TaskType。
 - 不实现 fork 路径下的 worktree notice 注入（仅 `_execute_with_worktree` 支持）。
 - 不接入 plugin / flag / managed 加载源（`register_plugin_source` 仅保留接口，未实装）。
-- 不消费 `skills` / `hooks` / `mcpServers` / `memory` / `omitMewcodeMd` 等字段——仅在解析层保留，运行时落地留给后续章节。
+- 不消费 `skills` / `hooks` / `mcpServers` / `memory` / `omitCccodeMd` 等字段——仅在解析层保留，运行时落地留给后续章节。
 - 不实现 `PermissionMode.PLAN` 的复杂裁剪与 bubble。
 - 不实现 120s 自动超时切后台 / 持久化后台恢复。
 - 不实现 `isolation: remote` 远端运行后端。

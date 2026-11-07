@@ -12,21 +12,21 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from mewcode.permissions.checker import Decision, PermissionChecker
-from mewcode.permissions.dangerous import DangerousCommandDetector, is_safe_command
-from mewcode.permissions.modes import (
+from cccode.permissions.checker import Decision, PermissionChecker
+from cccode.permissions.dangerous import DangerousCommandDetector, is_safe_command
+from cccode.permissions.modes import (
     DecisionEffect,
     PermissionMode,
     mode_decide,
 )
-from mewcode.permissions.rules import (
+from cccode.permissions.rules import (
     Rule,
     RuleEngine,
     extract_content,
     parse_rule,
 )
-from mewcode.permissions.sandbox import PathSandbox
-from mewcode.agent import (
+from cccode.permissions.sandbox import PathSandbox
+from cccode.agent import (
     Agent,
     PermissionMode as AgentPermissionMode,
     PermissionRequest,
@@ -374,7 +374,7 @@ class TestPermissionChecker:
 
     def test_plan_mode_allows_plan_file_write(self) -> None:
         self.checker.mode = PermissionMode.PLAN
-        plan_path = os.path.join(self.tmpdir, ".mewcode", "plans", "plan.md")
+        plan_path = os.path.join(self.tmpdir, ".cccode", "plans", "plan.md")
         self.checker.plan_file_path = plan_path
         tool = _make_tool("WriteFile", "write")
         d = self.checker.check(tool, {"file_path": plan_path})

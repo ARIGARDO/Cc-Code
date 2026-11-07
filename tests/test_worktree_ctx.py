@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from mewcode.tools.ctx import resolve_path, with_cwd, _ctx_cwd
+from cccode.tools.ctx import resolve_path, with_cwd, _ctx_cwd
 
 
 class TestResolvePath:

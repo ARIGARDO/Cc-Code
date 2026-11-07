@@ -2,7 +2,7 @@
 
 import pytest
 
-from mewcode.worktree.slug import validate_slug, flat_slug
+from cccode.worktree.slug import validate_slug, flat_slug
 
 
 class TestValidateSlug:

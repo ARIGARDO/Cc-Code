@@ -4,15 +4,15 @@
 
 ## 1. 实现完整性
 
-### 项目指令（mewcode/memory/instructions.py）
-- [ ] 模块常量 `MAX_INCLUDE_DEPTH = 5` 在 `/Users/codemelo/mewcode/mewcode/memory/instructions.py:5` 定义。
+### 项目指令（cccode/memory/instructions.py）
+- [ ] 模块常量 `MAX_INCLUDE_DEPTH = 5` 在 `/Users/codemelo/cccode/cccode/memory/instructions.py:5` 定义。
 - [ ] 模块常量 `INCLUDE_PREFIX = "@include "` 在 `instructions.py:6` 定义。
 - [ ] 函数 `process_includes(content, base_dir, project_root, depth=0)` 在 `instructions.py:9-46` 实现：逐行扫描，命中前缀的行剥相对路径并 `(base_dir / rel_path).resolve()`，越界落 `<!-- @include blocked: path outside project -->`，文件不存在落 `<!-- @include skipped: file not found -->`，命中文件递归 `process_includes(..., depth+1)`；`depth >= MAX_INCLUDE_DEPTH` 直接 return 原 content。
-- [ ] 函数 `load_instructions(project_root)` 在 `instructions.py:48-66` 实现：三层优先级（`<root>/MEWCODE.md` → `<root>/.mewcode/MEWCODE.md` → `~/.mewcode/MEWCODE.md`），每层跑 `process_includes`，多段用 `\n---\n` 拼接，无文件返回 `""`。
+- [ ] 函数 `load_instructions(project_root)` 在 `instructions.py:48-66` 实现：三层优先级（`<root>/CCCODE.md` → `<root>/.cccode/CCCODE.md` → `~/.cccode/CCCODE.md`），每层跑 `process_includes`，多段用 `\n---\n` 拼接，无文件返回 `""`。
 - [ ] 边界处理：越界 include 不抛异常（`abs_path.relative_to(resolved_root)` 在 `ValueError` 分支落注释行），测试 `TestProcessIncludes.test_path_outside_project_blocked` 验证。
 
-### 会话存档（mewcode/memory/session.py）
-- [ ] 模块常量 `SESSIONS_DIR = ".mewcode/sessions"` 在 `session.py:14` 定义。
+### 会话存档（cccode/memory/session.py）
+- [ ] 模块常量 `SESSIONS_DIR = ".cccode/sessions"` 在 `session.py:14` 定义。
 - [ ] 模块常量 `TIME_GAP_THRESHOLD = timedelta(hours=24)` 在 `session.py:15` 定义。
 - [ ] 模块常量 `DEFAULT_MAX_AGE_DAYS = 30` 在 `session.py:16` 定义。
 - [ ] 模块常量 `TITLE_MAX_LENGTH = 50` 在 `session.py:17` 定义。
@@ -30,9 +30,9 @@
 - [ ] 类 `SessionManager` 在 `session.py:390-482` 定义：`__init__ / create / list / resume / delete / cleanup` 全部到位；`resume` 内部跑 `validate_message_chain + records_to_messages` 链路。
 - [ ] 函数 `build_time_gap_message(last_active)` 在 `session.py:358-380` 实现：`<24h` 返 None；`>=48h` 表达「N 天」否则「N 小时」；含 `代码可能有变更` 文案。
 
-### 自动记忆（mewcode/memory/auto_memory.py）
-- [ ] 模块常量 `USER_MEMORIES_RELPATH = ".mewcode/memories.md"` 在 `auto_memory.py:8` 定义。
-- [ ] 模块常量 `PROJECT_MEMORIES_RELPATH = ".mewcode/memories.md"` 在 `auto_memory.py:9` 定义。
+### 自动记忆（cccode/memory/auto_memory.py）
+- [ ] 模块常量 `USER_MEMORIES_RELPATH = ".cccode/memories.md"` 在 `auto_memory.py:8` 定义。
+- [ ] 模块常量 `PROJECT_MEMORIES_RELPATH = ".cccode/memories.md"` 在 `auto_memory.py:9` 定义。
 - [ ] 常量 `MEMORY_EXTRACTION_PROMPT` 在 `auto_memory.py:11-37` 定义：含「用户偏好 / 纠正反馈 / 项目知识 / 参考资料」四类标题、「不要重复添加」、「没有值得记忆的内容，该分类下留空（不要写任何条目，不要写占位符）」、「不要调用任何工具」。
 - [ ] 常量 `_USER_LEVEL_HEADERS = {"用户偏好", "纠正反馈"}` 与 `_PROJECT_LEVEL_HEADERS = {"项目知识", "参考资料"}` 在 `auto_memory.py:39-40` 定义。
 - [ ] 类 `MemoryManager` 在 `auto_memory.py:43-72` 定义；`user_path / project_path` property 暴露。
@@ -44,16 +44,16 @@
 - [ ] 方法 `MemoryManager.clear()` 在 `auto_memory.py:191-195` 实现：两路径若存在 `write_text("")` 截断（不删文件）。
 - [ ] 方法 `MemoryManager.get_display_text()` 在 `auto_memory.py:197-213` 实现：两路径分别按 `[用户级] <path>\n<content>` / `[项目级] ...` 渲染、`\n\n` 拼接；都空返回 `"当前没有任何自动记忆。"`。
 
-### 包级 re-export（mewcode/memory/__init__.py）
-- [ ] `/Users/codemelo/mewcode/mewcode/memory/__init__.py` 集中 `from mewcode.memory.auto_memory import MemoryManager` / `from mewcode.memory.instructions import load_instructions, process_includes` / `from mewcode.memory.session import (ResumeResult, Session, SessionManager, SessionMeta, SessionRecord, build_time_gap_message, generate_session_summary, validate_message_chain)`。
+### 包级 re-export（cccode/memory/__init__.py）
+- [ ] `/Users/codemelo/cccode/cccode/memory/__init__.py` 集中 `from cccode.memory.auto_memory import MemoryManager` / `from cccode.memory.instructions import load_instructions, process_includes` / `from cccode.memory.session import (ResumeResult, Session, SessionManager, SessionMeta, SessionRecord, build_time_gap_message, generate_session_summary, validate_message_chain)`。
 - [ ] `__all__` 与导入名一一对应，无遗漏。
 
-### 对话注入（mewcode/conversation.py）
+### 对话注入（cccode/conversation.py）
 - [ ] 字段 `ltm_injected: bool = field(default=False, init=False)` 在 `conversation.py:41` 定义。
 - [ ] 方法 `inject_long_term_memory(instructions, memories)` 在 `conversation.py:80-107` 实现：已注入 return；按 `env_injected` 计算 pos；instructions 非空 insert `## 项目指令\n<content>`；memories 非空 insert `## 自动记忆\n<content>`；二者至少一个非空时追加 assistant `"好的，我已了解项目背景和记忆。"` 并置 `ltm_injected=True`。
 - [ ] 方法 `replace_history(new_messages)` 在 `conversation.py:109-112` 实现：重置 `env_injected=False / ltm_injected=False`。
 
-### Agent 钩入（mewcode/agent.py）
+### Agent 钩入（cccode/agent.py）
 - [ ] 模块常量 `MEMORY_EXTRACTION_INTERVAL = 5` 在 `agent.py:49` 定义。
 - [ ] `Agent.__init__` 在 `agent.py:295-329` 接收 `instructions_content: str = ""` / `memory_manager: MemoryManager | None = None`；自存 `self._loop_count = 0` / `self._extracting = False`。
 - [ ] `Agent.run` 入口在 `agent.py:399-405` 调 `inject_environment` 之后立即调 `conversation.inject_long_term_memory(self.instructions_content, memory_content)`。
@@ -61,24 +61,24 @@
 - [ ] `_extract_memories(conversation)` 在 `agent.py:870-883` 实现：`self._extracting` 互斥；try-except 包 `memory_manager.extract`，except `log.debug` 不传播；finally 复位 `self._extracting=False`。
 - [ ] `manual_compact` 在 `agent.py:902-904` 与 `run_to_completion` 在 `agent.py:924-926` 同样调 `inject_long_term_memory` 完成二次注入。
 
-### 命令处理（mewcode/commands/handlers/）
-- [ ] `/memory` 命令处理在 `mewcode/commands/handlers/memory.py:6-46` 实现：`memory_manager is None` 时提示「记忆管理器未初始化」；空 / `list` 子命令打印 `get_display_text`；`clear` 调用 `MemoryManager.clear` 并提示「所有自动记忆已清空。」；`edit` 打印 user/project 路径；未知子命令打印 usage。
+### 命令处理（cccode/commands/handlers/）
+- [ ] `/memory` 命令处理在 `cccode/commands/handlers/memory.py:6-46` 实现：`memory_manager is None` 时提示「记忆管理器未初始化」；空 / `list` 子命令打印 `get_display_text`；`clear` 调用 `MemoryManager.clear` 并提示「所有自动记忆已清空。」；`edit` 打印 user/project 路径；未知子命令打印 usage。
 - [ ] `MEMORY_COMMAND = Command(name="memory", description="记忆管理", usage="/memory [list | clear | edit]", type=CommandType.LOCAL, handler=handle_memory)` 在 `memory.py:40-46` 定义。
-- [ ] `/session` 命令处理在 `mewcode/commands/handlers/session.py` 实现：list / resume / new / delete 子命令；resume 后追加 `build_time_gap_message` 返回值；resume 切换 session/conversation 后复位 `ctx.agent._loop_count = 0`。
+- [ ] `/session` 命令处理在 `cccode/commands/handlers/session.py` 实现：list / resume / new / delete 子命令；resume 后追加 `build_time_gap_message` 返回值；resume 切换 session/conversation 后复位 `ctx.agent._loop_count = 0`。
 
 ## 2. 接入完整性（必查，杜绝死代码）
 
-- [ ] `grep -rn "from mewcode.memory" /Users/codemelo/mewcode/mewcode --include="*.py"` 至少 5 处非测试调用方：
-  - `mewcode/app.py:51-58` (导入 `MemoryManager / Session / SessionManager / SessionMeta / generate_session_summary / load_instructions`)
-  - `mewcode/agent.py:24` (`from mewcode.memory.auto_memory import MemoryManager`)
-  - `mewcode/commands/handlers/memory.py` (经 ctx 调用，无直接 import 不强求)
-  - `mewcode/commands/handlers/session.py` (`from mewcode.memory.session import build_time_gap_message`)
-- [ ] `grep -rn "MemoryManager\b" /Users/codemelo/mewcode/mewcode --include="*.py" | grep -v "__init__.py" | grep -v "_test\|/tests/"` 至少 4 处（`app.py / agent.py / commands/handlers/memory.py / memory/auto_memory.py`）。
-- [ ] `grep -rn "SessionManager\b" /Users/codemelo/mewcode/mewcode --include="*.py" | grep -v "__init__.py" | grep -v "/tests/"` 至少 3 处（`app.py / commands/handlers/session.py / memory/session.py`）。
-- [ ] `grep -rn "inject_long_term_memory" /Users/codemelo/mewcode/mewcode --include="*.py" | grep -v "_test\|/tests/"` 至少 4 处（`conversation.py` 定义 + `agent.py` 3 处调用：run 入口 / 压缩后 / run_to_completion）。
-- [ ] `grep -rn "MEMORY_EXTRACTION_INTERVAL\|_extract_memories\|_loop_count" /Users/codemelo/mewcode/mewcode --include="*.py" | grep -v "/tests/"` 命中 `agent.py` 主逻辑。
-- [ ] `grep -rn "load_instructions" /Users/codemelo/mewcode/mewcode --include="*.py" | grep -v "/tests/"` 命中 `app.py:634` 与 `memory/instructions.py / memory/__init__.py`。
-- [ ] `grep -rn "build_time_gap_message" /Users/codemelo/mewcode/mewcode --include="*.py" | grep -v "/tests/"` 命中 `commands/handlers/session.py` 与定义点。
+- [ ] `grep -rn "from cccode.memory" /Users/codemelo/cccode/cccode --include="*.py"` 至少 5 处非测试调用方：
+  - `cccode/app.py:51-58` (导入 `MemoryManager / Session / SessionManager / SessionMeta / generate_session_summary / load_instructions`)
+  - `cccode/agent.py:24` (`from cccode.memory.auto_memory import MemoryManager`)
+  - `cccode/commands/handlers/memory.py` (经 ctx 调用，无直接 import 不强求)
+  - `cccode/commands/handlers/session.py` (`from cccode.memory.session import build_time_gap_message`)
+- [ ] `grep -rn "MemoryManager\b" /Users/codemelo/cccode/cccode --include="*.py" | grep -v "__init__.py" | grep -v "_test\|/tests/"` 至少 4 处（`app.py / agent.py / commands/handlers/memory.py / memory/auto_memory.py`）。
+- [ ] `grep -rn "SessionManager\b" /Users/codemelo/cccode/cccode --include="*.py" | grep -v "__init__.py" | grep -v "/tests/"` 至少 3 处（`app.py / commands/handlers/session.py / memory/session.py`）。
+- [ ] `grep -rn "inject_long_term_memory" /Users/codemelo/cccode/cccode --include="*.py" | grep -v "_test\|/tests/"` 至少 4 处（`conversation.py` 定义 + `agent.py` 3 处调用：run 入口 / 压缩后 / run_to_completion）。
+- [ ] `grep -rn "MEMORY_EXTRACTION_INTERVAL\|_extract_memories\|_loop_count" /Users/codemelo/cccode/cccode --include="*.py" | grep -v "/tests/"` 命中 `agent.py` 主逻辑。
+- [ ] `grep -rn "load_instructions" /Users/codemelo/cccode/cccode --include="*.py" | grep -v "/tests/"` 命中 `app.py:634` 与 `memory/instructions.py / memory/__init__.py`。
+- [ ] `grep -rn "build_time_gap_message" /Users/codemelo/cccode/cccode --include="*.py" | grep -v "/tests/"` 命中 `commands/handlers/session.py` 与定义点。
 - [ ] 用户输入到本模块的路径可一句话描述：
   - 项目指令：App 启动 → `load_instructions(work_dir)` → `Agent(instructions_content=...)` → `Agent.run` 入口 → `conversation.inject_long_term_memory(instructions, memory_content)` 注入 `## 项目指令` block。
   - 自动记忆：Agent loop 收尾 → `_loop_count += 1` → 模 5 → `asyncio.ensure_future(self._extract_memories)` → `MemoryManager.extract` → `client.stream` 跑 prompt → `_write_memories` 分流写两路 memories.md → 下轮 `Agent.run` 重新 `memory_manager.load()` 注入。
@@ -87,7 +87,7 @@
 
 ## 3. 编译与测试
 
-- [ ] `ruff check mewcode/memory/ mewcode/agent.py mewcode/conversation.py mewcode/commands/handlers/memory.py mewcode/commands/handlers/session.py` 无错误。
+- [ ] `ruff check cccode/memory/ cccode/agent.py cccode/conversation.py cccode/commands/handlers/memory.py cccode/commands/handlers/session.py` 无错误。
 - [ ] `pytest tests/test_memory.py -v` 全部通过，覆盖：
   - `TestProcessIncludes`（no_includes / basic / recursive / depth_limit / path_outside_blocked / file_not_found）
   - `TestLoadInstructions`（single_layer / multi_layer_priority / no_files_returns_empty）
@@ -102,21 +102,21 @@
   - `TestMemoryManager`（load_empty / load_merges_user_and_project / clear / get_display_text_empty / write_memories_splits_correctly）
   - `TestConversationInjection`（inject_long_term_memory / inject_idempotent / inject_instructions_only / inject_memories_only / inject_nothing / replace_history_resets_ltm）
   - `TestMemoryExtraction`（extraction_prompt_contains_categories）
-- [ ] `python -c "from mewcode.memory import MemoryManager, load_instructions, process_includes, Session, SessionManager, SessionMeta, SessionRecord, ResumeResult, build_time_gap_message, generate_session_summary, validate_message_chain; print('ok')"` 打印 `ok`。
+- [ ] `python -c "from cccode.memory import MemoryManager, load_instructions, process_includes, Session, SessionManager, SessionMeta, SessionRecord, ResumeResult, build_time_gap_message, generate_session_summary, validate_message_chain; print('ok')"` 打印 `ok`。
 
 ## 4. 端到端验证
 
-- [ ] 项目根放一份 `MEWCODE.md`，TUI 启动后通过 `--debug` 日志或临时打印 `conversation.history[0:3]` 能看到 `## 项目指令\n...` 段。
-- [ ] `MEWCODE.md` 内写 `@include ./sub/style.md`（sub/style.md 在项目内）能展开；写 `@include ../../etc/passwd` 显示为 `<!-- @include blocked: path outside project -->`；写 `@include ./nonexistent.md` 显示为 `<!-- @include skipped: file not found -->`。
-- [ ] TUI 收发若干消息后退出（Ctrl-D），`.mewcode/sessions/` 出现一对 `session_*.jsonl` + `session_*.meta`；jsonl 每行为合法 JSON、含 `type/content/timestamp`。
+- [ ] 项目根放一份 `CCCODE.md`，TUI 启动后通过 `--debug` 日志或临时打印 `conversation.history[0:3]` 能看到 `## 项目指令\n...` 段。
+- [ ] `CCCODE.md` 内写 `@include ./sub/style.md`（sub/style.md 在项目内）能展开；写 `@include ../../etc/passwd` 显示为 `<!-- @include blocked: path outside project -->`；写 `@include ./nonexistent.md` 显示为 `<!-- @include skipped: file not found -->`。
+- [ ] TUI 收发若干消息后退出（Ctrl-D），`.cccode/sessions/` 出现一对 `session_*.jsonl` + `session_*.meta`；jsonl 每行为合法 JSON、含 `type/content/timestamp`。
 - [ ] 重启 TUI，运行 `/session list` 看到该会话；`/session resume <id>` 后 `conversation.history` 含历史消息，UI 重新渲染过去对话。
 - [ ] 把某 session 的 `meta.last_active` 手动改成 25 小时前再 `/session resume <id>`，对话末尾出现「[系统提示] 距离上次会话已过去 25 小时。代码可能有变更，建议在操作前重新读取相关文件。」
 - [ ] 把 `last_active` 改成 31 天前，启动时 `self.session_manager.cleanup()` 应当自动删除该会话；`/session list` 不再列出。
-- [ ] 跟 Agent 对话 5 轮（每轮包含一次 final assistant 无 tool_call），观察 `~/.mewcode/memories.md` 或项目级 `.mewcode/memories.md` 出现新行；下次启动后 `conversation.history` 的 `## 自动记忆` block 内包含该内容。
+- [ ] 跟 Agent 对话 5 轮（每轮包含一次 final assistant 无 tool_call），观察 `~/.cccode/memories.md` 或项目级 `.cccode/memories.md` 出现新行；下次启动后 `conversation.history` 的 `## 自动记忆` block 内包含该内容。
 - [ ] `/memory list` 显示 `[用户级] <path>\n...` / `[项目级] ...`；`/memory clear` 后再 `/memory list` 显示「当前没有任何自动记忆。」。
 - [ ] 主动构造一个含未结束 tool_use 的 session（手动改 jsonl 删掉对应 tool_result 行），`/session resume` 后 `validate_message_chain` 把 tool_use 截断，恢复出的对话不含未匹配的 tool_use（防止 API 400 invalid_request_error）。
 
 ## 5. 文档
 
-- [ ] spec.md / tasks.md / checklist.md 三件套齐全且最新（位于 `/Users/codemelo/mewcode/docs/python/ch09/`）。
+- [ ] spec.md / tasks.md / checklist.md 三件套齐全且最新（位于 `/Users/codemelo/cccode/docs/python/ch09/`）。
 - [ ] commit 信息标注 `ch09 (python)` 与三件套关闭状态。

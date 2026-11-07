@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from mewcode.agents.parser import (
+from cccode.agents.parser import (
     AgentDef,
     AgentParseError,
     parse_agent_file,
@@ -17,29 +17,29 @@ from mewcode.agents.parser import (
     VALID_MODELS,
     VALID_PERMISSION_MODES,
 )
-from mewcode.agents.loader import AgentLoader
-from mewcode.agents.tool_filter import (
+from cccode.agents.loader import AgentLoader
+from cccode.agents.tool_filter import (
     ALL_AGENT_DISALLOWED_TOOLS,
     ASYNC_AGENT_ALLOWED_TOOLS,
     resolve_agent_tools,
 )
-from mewcode.agents.fork import (
+from cccode.agents.fork import (
     FORK_BOILERPLATE_TAG,
     ForkError,
     build_forked_messages,
 )
-from mewcode.agents.trace import TraceManager
-from mewcode.agents.task_manager import TaskManager, BackgroundTask
-from mewcode.agents.notification import (
+from cccode.agents.trace import TraceManager
+from cccode.agents.task_manager import TaskManager, BackgroundTask
+from cccode.agents.notification import (
     format_task_notification,
     inject_task_notifications,
     MAX_NOTIFICATION_RESULT_LENGTH,
 )
-from mewcode.conversation import (
+from cccode.conversation import (
     ConversationManager,
     ToolUseBlock,
 )
-from mewcode.tools.agent_tool import (
+from cccode.tools.agent_tool import (
     AgentTool,
     AgentToolParams,
     MODEL_MAP,
@@ -180,7 +180,7 @@ class TestAgentLoader:
 
     def test_project_overrides_builtin(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            agents_dir = Path(tmpdir) / ".mewcode" / "agents"
+            agents_dir = Path(tmpdir) / ".cccode" / "agents"
             agents_dir.mkdir(parents=True)
             (agents_dir / "Plan.md").write_text(
                 "---\nname: Plan\ndescription: Custom Plan\nmaxTurns: 5\n---\n\nCustom plan body\n"
@@ -195,7 +195,7 @@ class TestAgentLoader:
 
     def test_hot_reload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            agents_dir = Path(tmpdir) / ".mewcode" / "agents"
+            agents_dir = Path(tmpdir) / ".cccode" / "agents"
             agents_dir.mkdir(parents=True)
             path = agents_dir / "TestAgent.md"
             path.write_text("---\nname: TestAgent\ndescription: V1\n---\n\nV1 body\n")
@@ -215,7 +215,7 @@ class TestAgentLoader:
 
     def test_bad_file_skipped(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
-            agents_dir = Path(tmpdir) / ".mewcode" / "agents"
+            agents_dir = Path(tmpdir) / ".cccode" / "agents"
             agents_dir.mkdir(parents=True)
             (agents_dir / "bad.md").write_text("---\ninvalid yaml: [: \n---\n\nBody\n")
             loader = AgentLoader(work_dir=Path(tmpdir))

@@ -2,7 +2,7 @@
 
 ## 1. 背景
 
-ch02 让 LLM 能说话，但 LLM 只是文字流；Coding Agent 真正能在仓库里干活靠的是「函数调用」。ch03 在 `mewcode/tools/` 落地 Function Calling 三步循环所需的全部抽象：统一的 `Tool` ABC 基类、`ToolRegistry` 注册中心、可序列化成 Anthropic 与 OpenAI 两种协议的 schema、流式 tool_use 事件类型，以及 6 个核心工具。没有这一章，ch04 Agent Loop 收到工具调用事件后无法把工具名映射到具体执行器，所有后续工具（ToolSearch、AskUserQuestion、Skill、Worktree、Team、SubAgent、MCP wrapper）也无处挂靠。
+ch02 让 LLM 能说话，但 LLM 只是文字流；Coding Agent 真正能在仓库里干活靠的是「函数调用」。ch03 在 `cccode/tools/` 落地 Function Calling 三步循环所需的全部抽象：统一的 `Tool` ABC 基类、`ToolRegistry` 注册中心、可序列化成 Anthropic 与 OpenAI 两种协议的 schema、流式 tool_use 事件类型，以及 6 个核心工具。没有这一章，ch04 Agent Loop 收到工具调用事件后无法把工具名映射到具体执行器，所有后续工具（ToolSearch、AskUserQuestion、Skill、Worktree、Team、SubAgent、MCP wrapper）也无处挂靠。
 
 ## 2. 目标
 
@@ -26,14 +26,14 @@ ch02 让 LLM 能说话，但 LLM 只是文字流；Coding Agent 真正能在仓�
 - F14: Grep 工具：`re.compile` + `include` basename glob 过滤 + 逐行扫描，输出 `<rel>:<line_num>:<line>`；遇到非法正则返回结构化错误；跳过 `SKIP_DIRS` 子树；无匹配时返回 `No matches found.`。
 - F15: ToolSearch 工具：把 deferred 工具按 `select:` / 关键词两种形态暴露给模型；命中后 `mark_discovered`；未命中时回退到列出全部 deferred 工具名。
 - F16: AskUserQuestion 工具（deferred）：把结构化问题经 `asyncio.Future` 交给 TUI 渲染，阻塞等待用户回应；带 5 分钟超时；TUI 通过 `_pending_event` 读取问题并 `set_result` 解阻塞。
-- F17: 流式事件类型 `TextDelta` / `ToolCallStart` / `ToolCallDelta` / `ToolCallComplete` / `ThinkingDelta` / `ThinkingComplete` / `StreamEnd` 集中定义在 `mewcode/tools/base.py`，便于 LLM client 与 Agent Loop 共享类型。
+- F17: 流式事件类型 `TextDelta` / `ToolCallStart` / `ToolCallDelta` / `ToolCallComplete` / `ThinkingDelta` / `ThinkingComplete` / `StreamEnd` 集中定义在 `cccode/tools/base.py`，便于 LLM client 与 Agent Loop 共享类型。
 - F18: 提供单工具结果上限常量 `MAX_OUTPUT_CHARS = 10000`，由 ch04 / ch08 在回灌会话前据此截断或落盘，避免单工具撑爆下一轮上下文。
 
 ## 4. 非功能需求
 
 - N1: Tool 子类无内部状态约束：核心工具大多用零参 `__init__` 即可注册；带可选注入（FileCache）的工具靠依赖注入实现可测试。
 - N2: ToolRegistry 非并发安全——只允许在装配阶段写入，运行期只读；MCP / SubAgent / Skill 等都在 `App._init_after_login` 阶段一次性注册完毕。
-- N3: 工具实现不允许依赖上层模块（agent / skills / teams），`mewcode/tools/` 处于底层；只能用 `mewcode.cache.FileCache`（typing-only）做可选注入。
+- N3: 工具实现不允许依赖上层模块（agent / skills / teams），`cccode/tools/` 处于底层；只能用 `cccode.cache.FileCache`（typing-only）做可选注入。
 - N4: 工具 `execute` 是 `async` 方法，必须能响应 `asyncio.CancelledError` 并尽快退出；长命令（Bash）依赖 `asyncio.wait_for` 超时机制兜底。
 - N5: Schema 形态稳定：以 Anthropic 形状为基础（Pydantic `model_json_schema()` 直接出形），OpenAI 形状在 `ToolRegistry.get_all_schemas` 边缘做形状转换，避免每个 Tool 各写两份 schema。
 
@@ -54,7 +54,7 @@ ch02 让 LLM 能说话，但 LLM 只是文字流；Coding Agent 真正能在仓�
  - 执行: Agent Loop 内 `_execute_single_tool_direct` 统一通过 `registry.get` + Pydantic 校验 + `await tool.execute` 调用。
  - 并发批次: `partition_tool_calls` 按 `tool.is_concurrency_safe` 把连续的并发安全调用归到同一批。
 - 与其他模块的交互:
- - 被依赖: `mewcode/agent.py`（取 schema、查工具、执行）、`mewcode/app.py`（创建并注册）、`mewcode/mcp/manager.py`（注册 MCP 工具 wrapper）、`mewcode/agents/tool_filter.py`（SubAgent 工具过滤复制 Registry）、`mewcode/skills/executor.py`（用 `allowedTools` 拷贝过滤的 Registry）、`mewcode/hooks/`（按 ToolName 覆盖）。
+ - 被依赖: `cccode/agent.py`（取 schema、查工具、执行）、`cccode/app.py`（创建并注册）、`cccode/mcp/manager.py`（注册 MCP 工具 wrapper）、`cccode/agents/tool_filter.py`（SubAgent 工具过滤复制 Registry）、`cccode/skills/executor.py`（用 `allowedTools` 拷贝过滤的 Registry）、`cccode/hooks/`（按 ToolName 覆盖）。
  - 依赖: 仅 Python 标准库（asyncio / pathlib / re）+ Pydantic（用于 params_model 出 JSON Schema），不依赖任何上层模块。
 
 ## 6. Out of Scope
@@ -64,7 +64,7 @@ ch02 让 LLM 能说话，但 LLM 只是文字流；Coding Agent 真正能在仓�
 - EditFile 的 `replace_all` 选项：当前要求 `old_string` 唯一。
 - Bash 危险命令静态校验：放到 ch06 权限系统。
 - Bash 后台任务 / Sandbox 模式 / sed-edit 解析：不在 ch03 范围。
-- 工具输出大结果存盘（spillover）：放到 ch08 `mewcode/context/`。
+- 工具输出大结果存盘（spillover）：放到 ch08 `cccode/context/`。
 - 细化的工具元数据（isReadOnly / isDestructive / maxResultSizeChars 等）：当前用 `ToolCategory` + `is_concurrency_safe` + 全局 `MAX_OUTPUT_CHARS` 简化表达，细化留给后续章节。
 - 协议层的 `cache_control` / `prompt caching`：放到 ch04 / ch08。
 

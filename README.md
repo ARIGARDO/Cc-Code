@@ -36,7 +36,7 @@ CcCode 提供基于 Textual 的交互式 TUI 界面，通过与 LLM 对话来辅
 ```bash
 # 克隆仓库
 git clone <repo-url>
-cd mewcode
+cd cccode
 
 # 创建并激活虚拟环境
 python -m venv .venv
@@ -51,25 +51,29 @@ pip install -e .
 在项目根目录创建 `config.yaml`：
 
 ```yaml
-provider:
-  protocol: anthropic
-  model: claude-sonnet-4-6
-  api_key: ${ANTHROPIC_API_KEY}
-  thinking: true
+providers:
+  - protocol: anthropic
+    model: claude-sonnet-4-6
+    api_key: ${ANTHROPIC_API_KEY}
+    thinking: true
 ```
 
 ### 运行
 
 ```bash
-python -m mewcode
+python -m cccode
 ```
+
+### 从旧名称迁移
+
+新版本使用 `.cccode/` 保存运行数据，读取 `CCCODE.md` 项目指令，并使用 `CCCODE_COORDINATOR_MODE` 环境变量。已有安装可将项目目录及用户主目录下的 `.mewcode/` 复制到对应的 `.cccode/`，将需要保留的 `MEWCODE.md` 复制为 `CCCODE.md`。若目标已存在，请先检查并按需合并，避免覆盖现有数据。迁移前建议备份数据；旧目录不会自动删除。
 
 ## 项目结构
 
 ```
-mewcode/
-├── cc-code/                  # 主应用包（mewcode）
-│   ├── __main__.py           # 入口（python -m mewcode）
+cccode/
+├── cccode/                   # 主应用包
+│   ├── __main__.py           # 入口（python -m cccode）
 │   ├── app.py                # Textual TUI 应用
 │   ├── agent.py              # Agent 循环（LLM + 工具执行）
 │   ├── client.py             # LLM 客户端抽象层（Anthropic/OpenAI）
@@ -107,14 +111,14 @@ pip install -e ".[dev]"
 ### 代码检查与格式化
 
 ```bash
-ruff check cc-code/ tests/
-ruff format cc-code/ tests/
+ruff check cccode/ tests/
+ruff format cccode/ tests/
 ```
 
 ### 类型检查
 
 ```bash
-mypy cc-code/
+mypy cccode/
 ```
 
 ### 运行测试

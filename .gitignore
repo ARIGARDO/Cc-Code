@@ -22,6 +22,7 @@ htmlcov/
 coverage.xml
 
 # CcCode runtime data
+.cccode/
 .mewcode/
 
 # Config with secrets

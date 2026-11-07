@@ -2,11 +2,11 @@
 
 ## 1. 背景
 
-没有 System Prompt，模型并不知道自己叫 MewCode、不知道运行在什么 OS、不知道有哪些工具能用、不知道用户的代码规范，输出会落到「通用 ChatGPT 助手」基线。所有静态规则（语气、安全、工具使用规范）和环境信息必须固化到 System Prompt 才能让模型回答稳定、可预期；动态指令（Plan Mode reminder、Hook 注入、Skill 拉取）则走 user channel 的 `<system-reminder>` 块或 `inject_environment`，避免反复改 System 失效缓存。本章把这条 prompt 拼接管线做出来。
+没有 System Prompt，模型并不知道自己叫 CcCode、不知道运行在什么 OS、不知道有哪些工具能用、不知道用户的代码规范，输出会落到「通用 ChatGPT 助手」基线。所有静态规则（语气、安全、工具使用规范）和环境信息必须固化到 System Prompt 才能让模型回答稳定、可预期；动态指令（Plan Mode reminder、Hook 注入、Skill 拉取）则走 user channel 的 `<system-reminder>` 块或 `inject_environment`，避免反复改 System 失效缓存。本章把这条 prompt 拼接管线做出来。
 
 ## 2. 目标
 
-对外提供 `mewcode.prompts`：调用者准备好工作目录、（可选）custom_instructions / skill_section / memory_section / hook_prompts，调一次 `build_system_prompt(...)` 拿到能直接喂给 LLM 客户端的纯文本 System Prompt。多个信息来源（角色、行为准则、工具规范、tone、文本输出风格、环境上下文、项目说明、Skill 摘要、Memory）按优先级合并；环境上下文由 `build_environment_context` 单独构造并通过 `ConversationManager.inject_environment` 注入 user channel；动态注入走 `ConversationManager.add_system_reminder` + ch04 主循环。
+对外提供 `cccode.prompts`：调用者准备好工作目录、（可选）custom_instructions / skill_section / memory_section / hook_prompts，调一次 `build_system_prompt(...)` 拿到能直接喂给 LLM 客户端的纯文本 System Prompt。多个信息来源（角色、行为准则、工具规范、tone、文本输出风格、环境上下文、项目说明、Skill 摘要、Memory）按优先级合并；环境上下文由 `build_environment_context` 单独构造并通过 `ConversationManager.inject_environment` 注入 user channel；动态注入走 `ConversationManager.add_system_reminder` + ch04 主循环。
 
 ## 3. 功能需求
 
@@ -29,7 +29,7 @@
 
 ## 5. 设计概要
 
-- 核心数据结构: `PromptSection(name: str, priority: int, content: str)` dataclass（`mewcode/prompts.py:10-15`）、`PromptBuilder._sections: list[PromptSection]`（`mewcode/prompts.py:17-28`），无独立 `EnvironmentContext` 类，环境字段直接由 `environment_section(work_dir)` 渲染。
+- 核心数据结构: `PromptSection(name: str, priority: int, content: str)` dataclass（`cccode/prompts.py:10-15`）、`PromptBuilder._sections: list[PromptSection]`（`cccode/prompts.py:17-28`），无独立 `EnvironmentContext` 类，环境字段直接由 `environment_section(work_dir)` 渲染。
 - 主流程:
  1. Agent.run 启动 → 调 `build_environment_context(work_dir, active_skills, skill_catalog, agent_catalog)` 并通过 `conversation.inject_environment(env_context)` 注入 user channel；
  2. 每轮迭代前调 `build_system_prompt(hook_prompts=..., coordinator_mode=..., agent_catalog=...)` 拼出 system prompt；
@@ -37,19 +37,19 @@
  4. Plan Mode 下额外调 `build_plan_mode_reminder(plan_path, plan_exists, iteration)` 并 `conversation.add_system_reminder(plan_reminder)`。
  - `build_system_prompt` 内部依次添加 8 固定 section + 3 可选 section，最后 `PromptBuilder.build()` 排序拼接。
 - 调用链:
- - `mewcode/agent.py:469` `Agent.run` 主循环每轮迭代调 `build_system_prompt`。
- - `mewcode/agent.py:935` `Agent.run_to_completion` 单轮入口也调 `build_system_prompt`。
- - `mewcode/agent.py:399` 和 `:898` `:918` 三处调 `build_environment_context`（启动、压缩后、run_to_completion）。
- - `mewcode/agent.py:480` Plan Mode 下调 `build_plan_mode_reminder`。
+ - `cccode/agent.py:469` `Agent.run` 主循环每轮迭代调 `build_system_prompt`。
+ - `cccode/agent.py:935` `Agent.run_to_completion` 单轮入口也调 `build_system_prompt`。
+ - `cccode/agent.py:399` 和 `:898` `:918` 三处调 `build_environment_context`（启动、压缩后、run_to_completion）。
+ - `cccode/agent.py:480` Plan Mode 下调 `build_plan_mode_reminder`。
  - `tests/test_agent.py:483/489/495/500` 四个单测覆盖 normal / plan / sparse / environment 四种路径。
 - 与其他模块的交互:
- - 依赖 Python 标准库（`platform` / `datetime` / `dataclasses`），coordinator_mode 时动态导入 `mewcode.teams.coordinator`。
- - 被 `mewcode.agent`（构造 prompt、注入 environment、Plan Mode reminder）使用。
- - 输入数据由 `mewcode.memory` / `mewcode.skills` / `mewcode.teams` 等模块准备好后传入。
+ - 依赖 Python 标准库（`platform` / `datetime` / `dataclasses`），coordinator_mode 时动态导入 `cccode.teams.coordinator`。
+ - 被 `cccode.agent`（构造 prompt、注入 environment、Plan Mode reminder）使用。
+ - 输入数据由 `cccode.memory` / `cccode.skills` / `cccode.teams` 等模块准备好后传入。
 
 ## 6. Out of Scope
 
-- Coordinator Mode 的 system prompt 替换分支已实现（`build_system_prompt` 内 `coordinator_mode=True` 委托给 `mewcode.teams.coordinator.get_coordinator_system_prompt`），但 coordinator 角色专有规则不在本章 spec 范围内详述。
+- Coordinator Mode 的 system prompt 替换分支已实现（`build_system_prompt` 内 `coordinator_mode=True` 委托给 `cccode.teams.coordinator.get_coordinator_system_prompt`），但 coordinator 角色专有规则不在本章 spec 范围内详述。
 - 不缓存 section 输出。
 - Plan Mode Reentry / Exit 提醒函数 Python 版本未实现（Go 有 `BuildPlanModeReentryReminder` / `BuildPlanModeExitReminder` 死代码，Python 直接跳过这两个函数）。
 - 不实现外部 `--system-prompt` / `appendSystemPrompt` CLI 参数。

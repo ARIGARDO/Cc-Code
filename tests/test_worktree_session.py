@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from mewcode.worktree.session import (
+from cccode.worktree.session import (
     WorktreeSession,
     load_session,
     save_session,

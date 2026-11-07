@@ -1,15 +1,15 @@
 # Worktree 隔离 Plan
 ## 架构概览
 
-新建 `src/mewcode/worktree/` 子包,集中放 Manager、Worktree、WorktreeSession、Slug 校验、创建后设置、自动清理、过期清理。其余包按以下方式接入:
+新建 `src/cccode/worktree/` 子包,集中放 Manager、Worktree、WorktreeSession、Slug 校验、创建后设置、自动清理、过期清理。其余包按以下方式接入:
 
-- **`mewcode.tool`**:新增 `ctx.py`(with_cwd / cwd_from_ctx / resolve_path);改造 6 个核心工具用 resolve_path
-- **`mewcode.subagent`**:`Definition` 加 `isolation` 字段,`parser.py` 解析 `isolation:` frontmatter
-- **`mewcode.agent`**:`AgentTool.execute` 加 `_execute_with_worktree` 分支,启动时通过 ctx 注入 cwd
-- **`mewcode.command`**:新增 `builtin_worktree.py`,提供 `/worktree` 一级命令与子命令(create/list/enter/exit/remove)
-- **`mewcode.tui`**:在 App 字段加 `worktree_mgr: worktree.Manager`、`active_cwd: str`;主 Agent 每次 Run 前用 `with_cwd(active_cwd)` 包住
-- **`src/mewcode/__main__.py` / `cli.py`**:`Manager(root)` 落在 `subagent_catalog = load_subagent_catalog(root)` 之后;失败降级为 None(可选);把 Manager 传给 `MewCodeApp` 和 `AgentTool`
-- **`.gitignore`**:追加 `.mewcode/worktrees/` 与 `.mewcode/worktree_session.json`
+- **`cccode.tool`**:新增 `ctx.py`(with_cwd / cwd_from_ctx / resolve_path);改造 6 个核心工具用 resolve_path
+- **`cccode.subagent`**:`Definition` 加 `isolation` 字段,`parser.py` 解析 `isolation:` frontmatter
+- **`cccode.agent`**:`AgentTool.execute` 加 `_execute_with_worktree` 分支,启动时通过 ctx 注入 cwd
+- **`cccode.command`**:新增 `builtin_worktree.py`,提供 `/worktree` 一级命令与子命令(create/list/enter/exit/remove)
+- **`cccode.tui`**:在 App 字段加 `worktree_mgr: worktree.Manager`、`active_cwd: str`;主 Agent 每次 Run 前用 `with_cwd(active_cwd)` 包住
+- **`src/cccode/__main__.py` / `cli.py`**:`Manager(root)` 落在 `subagent_catalog = load_subagent_catalog(root)` 之后;失败降级为 None(可选);把 Manager 传给 `CcCodeApp` 和 `AgentTool`
+- **`.gitignore`**:追加 `.cccode/worktrees/` 与 `.cccode/worktree_session.json`
 
 ## 核心数据结构### worktree.Worktree
 
@@ -61,8 +61,8 @@ from pathlib import Path
 class Manager:
     def __init__(self, repo_root: str) -> None: ...
     # repo_root: 绝对路径
-    # worktree_dir: <repo_root>/.mewcode/worktrees
-    # session_file: <repo_root>/.mewcode/worktree_session.json
+    # worktree_dir: <repo_root>/.cccode/worktrees
+    # session_file: <repo_root>/.cccode/worktree_session.json
     # symlink_dirs: 默认 ["node_modules", ".venv", "vendor"]
     # lock: asyncio.Lock
     # active: dict[str, Worktree]
@@ -111,7 +111,7 @@ class WorktreeHasChangesError(Exception):
 ### tool ctx 帮助函数
 
 ```python
-# src/mewcode/tool/ctx.py
+# src/cccode/tool/ctx.py
 import contextvars
 from contextlib import contextmanager
 from pathlib import Path
@@ -151,7 +151,7 @@ class Definition:
     isolation: str = ""  # "" 或 "worktree"
 ```
 
-## 模块设计### `mewcode.worktree`(新子包)**职责:** Worktree 完整生命周期管理 + Slug 校验 + 后台清理。
+## 模块设计### `cccode.worktree`(新子包)**职责:** Worktree 完整生命周期管理 + Slug 校验 + 后台清理。
 **对外接口:** Manager(含上面所列方法)+ validate_slug + WorktreeHasChangesError 等导出常量/类型。
 **依赖:** 标准库 + `asyncio.create_subprocess_exec` 调 git。
 **关键内部函数:**
@@ -176,7 +176,7 @@ class Definition:
 - `git.py` — `_run_git` helper、`_resolve_head_sha_from_fs`、`_has_worktree_changes`
 - 测试统一在 `tests/test_worktree_*.py`
 
-### `mewcode.tool` 改造**职责:** 增加 ctx cwd 传递机制,改造 6 个工具用 resolve_path / 子进程 cwd 参数。
+### `cccode.tool` 改造**职责:** 增加 ctx cwd 传递机制,改造 6 个工具用 resolve_path / 子进程 cwd 参数。
 **对外接口:** with_cwd / cwd_from_ctx / resolve_path(新增);6 个工具 execute 行为变更但 schema 不变。
 **依赖:** 无新增。
 
@@ -187,12 +187,12 @@ class Definition:
 - `grep.py` — 同 glob
 - `bash.py` — `asyncio.create_subprocess_exec(..., cwd=resolve_path(""))` (即 cwd 本身,空字符串解析为 cwd)
 
-### `mewcode.subagent` 改造**职责:** Definition 加 isolation 字段;parser 解析。
+### `cccode.subagent` 改造**职责:** Definition 加 isolation 字段;parser 解析。
 **改动:**
 - `parser.py` — frontmatter 字典中读 `isolation` 字段,合法值 `""` / `"worktree"`,其他值 stderr 警告回落空
 - `definition.py` — `Definition` 加 `isolation: str = ""`
 
-### `mewcode.agent` 改造**职责:** AgentTool 增加 worktree 分支,接受 Manager。
+### `cccode.agent` 改造**职责:** AgentTool 增加 worktree 分支,接受 Manager。
 **改动:**
 - `agent_tool.py`:
   - `AgentTool` 加属性 `worktree_mgr: worktree.Manager | None`
@@ -201,9 +201,9 @@ class Definition:
 - 新增 `agent_worktree.py`:
   - `_execute_with_worktree(definition, sub_agent, sub_conv, prompt, events) -> str`(async)
   - `build_worktree_notice(parent_cwd: str, wt_path: str) -> str`
-  - 直接 `from mewcode.worktree import random_agent_name`(worktree 包不依赖 agent,无导入循环)
+  - 直接 `from cccode.worktree import random_agent_name`(worktree 包不依赖 agent,无导入循环)
 
-### `mewcode.command` 新增**职责:** `/worktree` 一级命令 + 子命令解析。
+### `cccode.command` 新增**职责:** `/worktree` 一级命令 + 子命令解析。
 **改动:**
 - `builtins.py` 增加 `registry.register(Command(name="worktree", ...))`
 - 新增 `builtin_worktree.py`(handler 内自己 split 子命令 + 参数)
@@ -212,7 +212,7 @@ class Definition:
 **UI 接口扩展:**
 
 ```python
-# mewcode/command/ui.py
+# cccode/command/ui.py
 from typing import Protocol
 from dataclasses import dataclass
 
@@ -236,16 +236,16 @@ class UI(Protocol):
     def worktree_accessor(self) -> WorktreeAccessor | None: ...
 ```
 
-### `mewcode.tui` 改造**职责:** 持有 Manager 引用,把 active_cwd 注入主 Agent ctx。
+### `cccode.tui` 改造**职责:** 持有 Manager 引用,把 active_cwd 注入主 Agent ctx。
 **改动:**
-- `app.py` `MewCodeApp` 加属性 `worktree_mgr: worktree.Manager | None`、`active_cwd: str = ""`(空表示进程 cwd)
-- `MewCodeApp.__init__` 接收 `worktree_mgr`(或通过依赖注入)
+- `app.py` `CcCodeApp` 加属性 `worktree_mgr: worktree.Manager | None`、`active_cwd: str = ""`(空表示进程 cwd)
+- `CcCodeApp.__init__` 接收 `worktree_mgr`(或通过依赖注入)
 - 在 App 的 run_once / submit 入口前,用 `with with_cwd(self._effective_cwd()):` 包住主 Agent Run 调用
 - `_effective_cwd()` 返回 `self.active_cwd` 或 `str(Path.cwd())`
 - 实现 `worktree_accessor()` 方法,返回一个适配 worktree.Manager 的实例
-- 启动时(`MewCodeApp.__init__` 内)若 Manager 的 `current_session()` 非 None,把 `self.active_cwd = session.worktree_path`
+- 启动时(`CcCodeApp.__init__` 内)若 Manager 的 `current_session()` 非 None,把 `self.active_cwd = session.worktree_path`
 
-### `src/mewcode/cli.py` / `__main__.py` 改造
+### `src/cccode/cli.py` / `__main__.py` 改造
 
 ```python
 # 紧跟 subagent_catalog = load_subagent_catalog(root) 之后
@@ -268,7 +268,7 @@ agent_tool = AgentTool(
     worktree_mgr=worktree_mgr,
 )
 
-app = MewCodeApp(
+app = CcCodeApp(
     # ... 既有参数 ...
     worktree_mgr=worktree_mgr,
 )
@@ -326,7 +326,7 @@ async def run_once(self):
 ## 文件组织
 
 ```
-src/mewcode/worktree/                — 新子包
+src/cccode/worktree/                — 新子包
 ├── __init__.py                       — 导出 Manager / validate_slug / 错误类型
 ├── manager.py                        — Manager 类型 + 构造
 ├── create.py                         — create + 快速恢复 + post-creation setup
@@ -336,7 +336,7 @@ src/mewcode/worktree/                — 新子包
 ├── session.py                        — WorktreeSession + JSON 持久化
 └── git.py                            — _run_git / _has_worktree_changes / _resolve_head_sha_from_fs
 
-src/mewcode/tool/
+src/cccode/tool/
 ├── ctx.py                            — 新增 with_cwd/cwd_from_ctx/resolve_path
 ├── bash.py                           — 改造:子进程 cwd=resolve_path("")
 ├── read_file.py                      — 改造:用 resolve_path
@@ -345,20 +345,20 @@ src/mewcode/tool/
 ├── glob.py                           — 改造:用 resolve_path
 └── grep.py                           — 改造:用 resolve_path
 
-src/mewcode/subagent/
+src/cccode/subagent/
 ├── definition.py                     — 加 isolation 字段
 └── parser.py                         — 解析 isolation:
 
-src/mewcode/agent/
+src/cccode/agent/
 ├── agent_tool.py                     — execute 加 isolation 分支
 └── agent_worktree.py                 — 新增:_execute_with_worktree + notice 构造
 
-src/mewcode/command/
+src/cccode/command/
 ├── builtin_worktree.py               — 新增:/worktree handler
 ├── builtins.py                       — 增加 registry.register
 └── ui.py                             — 加 WorktreeAccessor 协议
 
-src/mewcode/tui/
+src/cccode/tui/
 ├── app.py                            — 加 worktree_mgr / active_cwd / cwd 注入
 └── worktree_adapter.py               — 实现 WorktreeAccessor(适配 worktree.Manager)
 
@@ -373,7 +373,7 @@ tests/
 ├── test_subagent_parser.py           — 新增 isolation case
 └── test_agent_worktree.py
 
-src/mewcode/cli.py / __main__.py      — 接入
+src/cccode/cli.py / __main__.py      — 接入
 
 .gitignore                            — 追加两行
 ```
@@ -383,15 +383,15 @@ src/mewcode/cli.py / __main__.py      — 接入
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
 | cwd 传递方式 | `contextvars.ContextVar` + with_cwd 上下文管理器 | 已有 ContextVar 范式承载 conv / subagent_depth,Tool schema 不变,prompt cache 不抖动 |
-| Worktree 目录位置 | `.mewcode/worktrees/<flat_slug>/` | README 既定方案;仓库内 + .gitignore 不追踪 |
+| Worktree 目录位置 | `.cccode/worktrees/<flat_slug>/` | README 既定方案;仓库内 + .gitignore 不追踪 |
 | 嵌套 slug `/` 处理 | 替换为 `+`(flat_slug)做文件系统/分支名 | Git 分支的 `/` 是命名空间分隔符,会导致 `worktree-team/alice` 与 `worktree-team` 的 D/F 冲突 |
-| Manager 构造失败处理 | 抛异常,mewcode 降级 worktree_mgr=None | 不阻塞 mewcode 启动;后续 isolation:worktree 调用回错误信息 |
+| Manager 构造失败处理 | 抛异常,cccode 降级 worktree_mgr=None | 不阻塞 cccode 启动;后续 isolation:worktree 调用回错误信息 |
 | 快速恢复 | 纯 fs read,不调 git | README 说明大仓库 git fetch 6-8s,fs read 3ms;场景:同一 SubAgent 反复进同 worktree |
 | 创建后设置失败处理 | 仅 stderr 警告 | 都是 best-effort,失败 ≠ 不可用 |
 | `-B` vs `-b` | `-B`(重置) | 上次残留的孤儿分支不会让 create 失败 |
 | `await asyncio.sleep(0.1)` 在 remove | 保留 | README 指出 git lockfile 竞态;100ms 是经验值 |
 | os.chdir 使用场景 | 仅 Manager.exit 兜底一次 | 其他全部 explicit cwd;避免进程级 cwd 成为同步点 |
-| 后台清理触发时机 | mewcode 启动时跑一次,asyncio.create_task 后台执行 | 不阻塞主流程;ch11 已有 session.clean_expired 同样做法 |
+| 后台清理触发时机 | cccode 启动时跑一次,asyncio.create_task 后台执行 | 不阻塞主流程;ch11 已有 session.clean_expired 同样做法 |
 | `.worktreeinclude` 缺失行为 | 跳过 D 步骤,不报错 | 大多数项目没这文件 |
 | `subagent.isolation` 默认值 | `""`(无隔离) | 不破坏 ch13 既有定义文件 |
 | 临时 worktree 命名 | `agent-a<7hex>` | README 既定;sweep_stale 正则匹配 |

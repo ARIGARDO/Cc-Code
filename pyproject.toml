@@ -1,5 +1,5 @@
 [project]
-name = "mewcode"
+name = "cc-code"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -24,6 +24,16 @@ dev = [
 
 [tool.ruff]
 target-version = "py311"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cccode*"]
+
+[tool.setuptools.package-data]
+cccode = ["agents/builtins/*.md", "skills/builtins/**/*.md", "skills/builtins/**/*.json", "skills/builtins/**/references/*.py"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -4,29 +4,29 @@ ch13 SubAgent 隔离了消息、权限决策状态、文件读缓存和 token �
 
 Git 分支只能做**时间维度**的隔离(切换分支时工作目录被覆盖,同一时刻只有一个工作目录),不能解决并行问题;切分支还会刷被切文件的 mtime,触发依赖追踪型构建工具的链式重编。
 
-需要的是**空间维度**的隔离:同一仓库同时挂多个工作目录、共享版本库、各自一个分支。这就是 Git Worktree (Git 2.5+) 的能力。本章在 mewcode 中封装一层 Worktree 管理逻辑,把这块拼图补给 SubAgent,让后台 / 并行场景安全可用。
+需要的是**空间维度**的隔离:同一仓库同时挂多个工作目录、共享版本库、各自一个分支。这就是 Git Worktree (Git 2.5+) 的能力。本章在 cccode 中封装一层 Worktree 管理逻辑,把这块拼图补给 SubAgent,让后台 / 并行场景安全可用。
 
-mewcode 现有相关基础设施:
-- ch13 SubAgent 已支持 frontmatter (`src/mewcode/subagent/parser.py`),解析 `name/description/tools/disallowed_tools/model/max_turns/permission_mode/background` 等字段
+cccode 现有相关基础设施:
+- ch13 SubAgent 已支持 frontmatter (`src/cccode/subagent/parser.py`),解析 `name/description/tools/disallowed_tools/model/max_turns/permission_mode/background` 等字段
 - ch13 `agent.AgentTool.execute` 已是子 Agent 启动入口,本章在此处插桩 isolation 分支
 - ch08 文件读缓存以绝对路径作为 key
-- ch10 `src/mewcode/command` 已有 slash 命令注册系统
-- `.gitignore` 已忽略 `.mewcode/sessions/` 等子目录,本章扩展把 `.mewcode/worktrees/` 也忽略
+- ch10 `src/cccode/command` 已有 slash 命令注册系统
+- `.gitignore` 已忽略 `.cccode/sessions/` 等子目录,本章扩展把 `.cccode/worktrees/` 也忽略
 - Tool 接口 `execute(ctx, args) -> Result` 现支持 ctx 携带值(已有 `ctx_key_conv` / `ctx_key_subagent_depth` 范式,Python 用 `contextvars.ContextVar` 实现),可作为 explicit cwd 的传递通道
 
 本章不引入 Worktree 间合并策略、跨目录代码同步、多 Agent 并行编排,这些属于上层 / 下一章范畴。
 
 ## 目标- **G1**: 提供 `WorktreeManager` 封装 Worktree 完整生命周期——创建、快速恢复、进入、退出、删除;并发场景下用单一 `asyncio.Lock` 保护内部 `active` 映射
 - **G2**: 名字 (slug) 严格安全校验——限字符集 `[a-zA-Z0-9._-]`、总长度上限 64、显式拒绝 `.` 和 `..` 段名、允许 `/` 做嵌套分隔;防 LLM 输入触发路径遍历
-- **G3**: Worktree 目录统一落在仓库内不被追踪的位置 `.mewcode/worktrees/<flat_slug>/`,分支名前缀 `worktree-<flat_slug>`,嵌套 slug 的 `/` 替换为 `+` 避免 Git D/F 冲突
-- **G4**: 创建后做四类环境初始化——A 复制本地配置 (`.mewcode/config.yaml` / `.mewcode/settings.local.yaml`)、B 配置子目录的 git hooks (`core.hooksPath` 不自动继承)、C 软链 `node_modules` / `.venv` / `vendor` 等大目录、D 按项目根 `.worktreeinclude` 复制被忽略但运行需要的文件;均为 best-effort,失败只警告不中断创建
+- **G3**: Worktree 目录统一落在仓库内不被追踪的位置 `.cccode/worktrees/<flat_slug>/`,分支名前缀 `worktree-<flat_slug>`,嵌套 slug 的 `/` 替换为 `+` 避免 Git D/F 冲突
+- **G4**: 创建后做四类环境初始化——A 复制本地配置 (`.cccode/config.yaml` / `.cccode/settings.local.yaml`)、B 配置子目录的 git hooks (`core.hooksPath` 不自动继承)、C 软链 `node_modules` / `.venv` / `vendor` 等大目录、D 按项目根 `.worktreeinclude` 复制被忽略但运行需要的文件;均为 best-effort,失败只警告不中断创建
 - **G5**: 快速恢复——目录已存在时,仅读 `.git` 指针 + `HEAD` + `refs/` 文件系统读还原 commit SHA,不调任何 git 子进程,毫秒级返回
 - **G6**: 进入 Worktree 不调 `os.chdir`——把 `WorktreePath` 记到会话状态 (`WorktreeSession`) 并通过 ctx 传给工具调用;Bash / Read / Write / Edit / Glob / Grep 工具从 ctx 取 cwd,本次调用显式声明在 Worktree 里跑;进程级 cwd 不变,避免并发组件之间的同步点
 - **G7**: 文件读缓存等以绝对路径为 key 的缓存,天然按目录隔离;进入 / 退出 Worktree **不需要清缓存**
 - **G8**: 退出时变更保护——`action="remove"` 且未显式 `discard_changes=True` 时,检测到未提交修改或本地多于 base 的 commit 一律拒绝删除;同时切回原 cwd 兜底防 session 期间残留
 - **G9**: 自动清理 (`auto_cleanup`)——SubAgent 退出时,无变更则直接 remove,有变更则保留 Worktree 路径与分支名追加到 SubAgent 结果文本给主 Agent review
 - **G10**: 后台过期 Worktree 清理——按命名模式 (`agent-a[0-9a-f]{7}`) 只识别临时 Worktree,叠加时间过滤(超过 cutoff 才考虑),最后做 fail-closed 变更检查(有未提交修改 / 未推送 commit 都保留)
-- **G11**: `WorktreeSession` 持久化到 `.mewcode/worktree_session.json`,mewcode 启动时读取并校验目录仍存在;退出时清空文件而不是删文件,确保下次启动不误恢复
+- **G11**: `WorktreeSession` 持久化到 `.cccode/worktree_session.json`,cccode 启动时读取并校验目录仍存在;退出时清空文件而不是删文件,确保下次启动不误恢复
 - **G12**: 在 `subagent.Definition` 增加 `isolation` 字段 (`""` / `"worktree"`);SubAgent 启动器检测到 `isolation:worktree` 后,自动 `create → inject worktree notice → set ctx cwd → run_to_completion → auto_cleanup`,无需在 prompt / 工具调用里显式指定
 - **G13**: 提供 TUI slash 命令 `/worktree create <slug>`、`/worktree list`、`/worktree exit [--remove]`、`/worktree remove <slug> [--discard]`——让用户手动管理;手动创建的 Worktree **不走自动清理**
 - **G14**: 与 ch04~ch13 协同——主 Agent 看到的工具列表不变(ctx 注入不改 schema)、prompt cache 不抖动、既有测试不破坏
@@ -39,9 +39,9 @@ mewcode 现有相关基础设施:
 
 ### WorktreeManager 与核心数据结构- **F2**: `worktree.Worktree`(dataclass)记录单个 Worktree 的元信息——`name`(原始 slug)、`path`(绝对路径)、`branch`(`worktree-<flat_slug>`)、`based_on`(创建时的 base 引用,如 `HEAD` 或具体 commit)、`head_commit`(创建时的 commit SHA)、`created`(datetime)、`manual`(bool,是否用户手动创建,影响 auto_cleanup 跳过判断)
 - **F3**: `worktree.WorktreeSession`(dataclass)记录当前活跃的 Worktree 会话——`original_cwd`、`worktree_path`、`worktree_name`(原 slug)、`original_branch`、`original_head_commit`、`session_id`(UUID 字符串)、`hook_based`(bool,预留)
-- **F4**: `worktree.Manager` 内部字段——`repo_root`(绝对路径)、`worktree_dir`(`<repo_root>/.mewcode/worktrees`)、`session_file`(`<repo_root>/.mewcode/worktree_session.json`)、`lock: asyncio.Lock`、`active: dict[str, Worktree]`、`current_session: WorktreeSession | None`
+- **F4**: `worktree.Manager` 内部字段——`repo_root`(绝对路径)、`worktree_dir`(`<repo_root>/.cccode/worktrees`)、`session_file`(`<repo_root>/.cccode/worktree_session.json`)、`lock: asyncio.Lock`、`active: dict[str, Worktree]`、`current_session: WorktreeSession | None`
 - **F5**: `worktree.Manager(repo_root: str)` 构造时(或工厂函数 `Manager.create(repo_root)`)——
-  - 校验 `repo_root` 是 git 仓库根目录(`git rev-parse --show-toplevel` 输出与之等);失败抛异常,mewcode 启动允许降级到「Worktree 功能未启用」
+  - 校验 `repo_root` 是 git 仓库根目录(`git rev-parse --show-toplevel` 输出与之等);失败抛异常,cccode 启动允许降级到「Worktree 功能未启用」
   - 创建 `worktree_dir` 目录(如不存在)
   - 从 `session_file` 反序列化 `current_session`(允许文件不存在);若 session 指向的 Worktree 目录已不存在,清空 session 文件并把 `current_session=None`
   - 扫描 `worktree_dir` 子目录还原 `active` 映射(name → Worktree),仅按文件系统读填字段(快速恢复路径)
@@ -54,7 +54,7 @@ mewcode 现有相关基础设施:
   - 6. 执行创建后设置 `_perform_post_creation_setup` (F7-F10),任何子步骤失败仅 stderr 警告,不中断
   - 7. 读出 `head_sha`(`git -C <wt_path> rev-parse HEAD`),装填 `Worktree(name, path, branch, based_on, head_commit, created, manual)`
   - 8. 加入 `active`,返回
-- **F7**: 创建后设置 A——复制本地配置文件,从 `<repo_root>/.mewcode/config.yaml` 与 `<repo_root>/.mewcode/settings.local.yaml` 复制到 Worktree 同位置(目标目录已存在跳过,文件不存在跳过)
+- **F7**: 创建后设置 A——复制本地配置文件,从 `<repo_root>/.cccode/config.yaml` 与 `<repo_root>/.cccode/settings.local.yaml` 复制到 Worktree 同位置(目标目录已存在跳过,文件不存在跳过)
 - **F8**: 创建后设置 B——配置 git hooks,检测主仓库 `core.hooksPath` 与 `.husky/` 目录,若有则 `git -C <wt_path> config core.hooksPath <绝对路径>`;无则跳过
 - **F9**: 创建后设置 C——按配置软链大目录,默认列表 `["node_modules", ".venv", "vendor"]`,对每个目录若主仓库存在且 Worktree 不存在则创建 symlink (`os.symlink`);其他失败只警告
 - **F10**: 创建后设置 D——按项目根 `.worktreeinclude` 复制被忽略但运行需要的文件;读取 `.worktreeinclude` 每行为 glob 模式(支持 `*.env` 这种),用 `git -C <repo_root> ls-files --others --ignored --exclude-standard --directory` 列出所有忽略文件,匹配模式后逐个复制到 Worktree 对应路径;文件不存在 / 模式无匹配只警告
@@ -80,7 +80,7 @@ mewcode 现有相关基础设施:
   - 3. 有变更:`AutoCleanupReport(kept=True, path=wt.path, branch=wt.branch)`
 - **F15**: `_has_worktree_changes(wt_path, base_commit) -> bool`——两件事:`git -C <wt_path> status --porcelain` 非空即有未提交;`git -C <wt_path> rev-list --count <base_commit>..HEAD` >0 即有新增 commit;任一 git 命令本身出错 fail-closed 返回 True(宁可保留)
 
-### explicit cwd 工具改造- **F16**: 在 `mewcode.tool` 包定义 ctx key 与帮助函数——
+### explicit cwd 工具改造- **F16**: 在 `cccode.tool` 包定义 ctx key 与帮助函数——
   - Python 用 `contextvars.ContextVar("cwd", default=None)` 实现 ctx 传递(也可用显式参数,本期统一用 ContextVar 与现有 conv/depth 对齐)
   - `with_cwd(dir: str)` 返回 context manager 设置 ContextVar token
   - `cwd_from_ctx() -> str | None` 取回
@@ -124,8 +124,8 @@ mewcode 现有相关基础设施:
 - **F29**: slash 命令属于 `KindLocal`(只读)或 `KindUI`(改 TUI 状态),不进对话历史;输出走 `ui.println`
 
 ### 持久化与恢复- **F30**: `WorktreeSession` 序列化为 JSON,字段名采用小写下划线;原子写——先写 `<session_file>.tmp` 再 `os.replace`
-- **F31**: mewcode 启动时(`Manager.__init__` 内),读 `session_file` 反序列化;若文件内容为 `null` 或空,`current_session=None`;若 `worktree_path` 不存在,清空文件并 `current_session=None`(stderr 警告 "session worktree gone, cleared")
-- **F32**: `--resume` (mewcode 现有恢复入口)读到已有 session 时,把 `active_cwd` 设置到 `session.worktree_path`,主 Agent 后续工具调用都按 explicit cwd 走
+- **F31**: cccode 启动时(`Manager.__init__` 内),读 `session_file` 反序列化;若文件内容为 `null` 或空,`current_session=None`;若 `worktree_path` 不存在,清空文件并 `current_session=None`(stderr 警告 "session worktree gone, cleared")
+- **F32**: `--resume` (cccode 现有恢复入口)读到已有 session 时,把 `active_cwd` 设置到 `session.worktree_path`,主 Agent 后续工具调用都按 explicit cwd 走
 
 ### 后台过期清理- **F33**: `Manager.sweep_stale(cutoff: datetime) -> list[str]`(async)——
   - 1. 遍历 `worktree_dir.iterdir()`
@@ -133,17 +133,17 @@ mewcode 现有相关基础设施:
   - 3. **第二层** 目录 mtime > cutoff 跳过;`current_session.worktree_path == 子目录` 跳过
   - 4. **第三层** `_has_worktree_changes(子目录, 该 wt 的 head_commit)` 为 True 跳过(fail-closed);额外跑 `git -C <子目录> rev-list --max-count=1 HEAD --not --remotes`,非空跳过(有未推送 commit 也保留)
   - 5. 通过三层的子目录调 `remove(name, ExitOptions(discard_changes=True))`,记入 `removed`
-- **F34**: mewcode 启动时跑一次 `asyncio.create_task(manager.sweep_stale(now - timedelta(hours=24)))`(异步、后台执行),不阻塞启动
+- **F34**: cccode 启动时跑一次 `asyncio.create_task(manager.sweep_stale(now - timedelta(hours=24)))`(异步、后台执行),不阻塞启动
 
-### .gitignore 更新- **F35**: 在项目根 `.gitignore` 追加 `.mewcode/worktrees/` 与 `.mewcode/worktree_session.json` 两行;mewcode 启动时若发现 `.gitignore` 不含这两行,**只警告不修改**(尊重用户配置)
+### .gitignore 更新- **F35**: 在项目根 `.gitignore` 追加 `.cccode/worktrees/` 与 `.cccode/worktree_session.json` 两行;cccode 启动时若发现 `.gitignore` 不含这两行,**只警告不修改**(尊重用户配置)
 
 ## 非功能需求- **N1**: 主 Agent 看到的工具列表稳定——ctx 注入不改 schema,既有缓存不抖动
 - **N2**: Worktree 创建后设置失败 (F7-F10) 不阻塞创建;主路径只在 git worktree add 本身失败时抛异常
 - **N3**: Manager 所有状态变更受 `asyncio.Lock` 保护;Worktree 内部 git 操作不持锁,避免长锁
-- **N4**: `os.chdir` 在 mewcode 进程内只出现在 `Manager.exit` 兜底调用;其他地方一律用 explicit cwd
-- **N5**: Worktree session 文件被破坏(非法 JSON)启动时只警告并清空,不阻断 mewcode 启动
+- **N4**: `os.chdir` 在 cccode 进程内只出现在 `Manager.exit` 兜底调用;其他地方一律用 explicit cwd
+- **N5**: Worktree session 文件被破坏(非法 JSON)启动时只警告并清空,不阻断 cccode 启动
 - **N6**: 与 ch04~ch13 既有测试零破坏——`pytest` 全绿
-- **N7**: 中文友好——错误消息与命令输出全部中文(对齐 mewcode 其他模块风格)
+- **N7**: 中文友好——错误消息与命令输出全部中文(对齐 cccode 其他模块风格)
 
 ## 不做的事
 
@@ -152,15 +152,15 @@ mewcode 现有相关基础设施:
 - 多 Agent 并行编排 / Agent Team(下一章)
 - 主 Agent 用专用 merge 工具(README 章末已说明)
 - Plugin 来源的 Worktree 配置
-- Windows 平台特殊支持(symlink 行为在 Windows 上不保证;本期 mewcode 以 macOS / Linux 为主)
-- 跨 mewcode 进程实例的 Worktree 共享(同一仓库同一时刻只支持一个 mewcode 实例操作 worktree session)
+- Windows 平台特殊支持(symlink 行为在 Windows 上不保证;本期 cccode 以 macOS / Linux 为主)
+- 跨 cccode 进程实例的 Worktree 共享(同一仓库同一时刻只支持一个 cccode 实例操作 worktree session)
 - Worktree 内部 git 操作的 retry / exponential backoff(用一次性 `await asyncio.sleep(0.1)` 解决 lockfile 竞态即可)
 
 ## 验收标准- **AC1**: `worktree.validate_slug` 对 `"feature/a"` 通过,对 `"../etc"` / `".."` / `"a//b"` / `"a/b "` 拒绝
-- **AC2**: `manager.create("alice", "HEAD", manual=True)` 在 `.mewcode/worktrees/alice/` 下落地 Worktree,分支为 `worktree-alice`
-- **AC3**: `manager.create("team/alice", "HEAD", manual=True)` 在 `.mewcode/worktrees/team+alice/` 下落地,分支 `worktree-team+alice`
+- **AC2**: `manager.create("alice", "HEAD", manual=True)` 在 `.cccode/worktrees/alice/` 下落地 Worktree,分支为 `worktree-alice`
+- **AC3**: `manager.create("team/alice", "HEAD", manual=True)` 在 `.cccode/worktrees/team+alice/` 下落地,分支 `worktree-team+alice`
 - **AC4**: 已存在 worktree 目录时再调 create 走快速恢复——不调 `git worktree add`,毫秒级返回(单测可断言 git 子进程未启动)
-- **AC5**: 创建后设置 A——主仓库存在 `.mewcode/settings.local.yaml` 时,Worktree 内同位置出现该文件
+- **AC5**: 创建后设置 A——主仓库存在 `.cccode/settings.local.yaml` 时,Worktree 内同位置出现该文件
 - **AC6**: 创建后设置 B——主仓库 `.husky/` 存在时,Worktree 的 `.git/config` 含 `core.hooksPath`
 - **AC7**: 创建后设置 C——主仓库有 `node_modules/` 时,Worktree 内是软链(`Path.is_symlink()` 为 True)
 - **AC8**: 创建后设置 D——主仓库有 `.worktreeinclude` 含 `*.env`,且主仓库存在被忽略的 `.env`,Worktree 内出现 `.env`
@@ -175,6 +175,6 @@ mewcode 现有相关基础设施:
 - **AC17**: `/worktree create alice` slash 命令成功落地 Worktree,`/worktree list` 输出含 alice
 - **AC18**: `/worktree exit --remove` 在 Worktree 有未提交修改时报错;加 `--discard` 后成功删除
 - **AC19**: `manager.sweep_stale(cutoff)` 只删命名匹配 `agent-a[0-9a-f]{7}` 的目录、跳过当前 session、跳过有变更或有未推送 commit 的目录
-- **AC20**: `WorktreeSession` 持久化到 `.mewcode/worktree_session.json`,启动时读取;指向的 Worktree 目录被外部删除后,启动时清空 session 并 stderr 警告
-- **AC21**: 项目可启动 (`python -m mewcode`)、所有单元测试通过 (`pytest`)、lint 通过 (`ruff check`)
-- **AC22**: tmux 实跑——`python -m mewcode` 启动 + 触发 `isolation:worktree` 子 Agent 改文件 + 验证主目录 `server.py`(若改的是 `server.py`)未变,Worktree 副本里 `server.py` 已变;Worktree 留盘 / 自动清理符合预期
+- **AC20**: `WorktreeSession` 持久化到 `.cccode/worktree_session.json`,启动时读取;指向的 Worktree 目录被外部删除后,启动时清空 session 并 stderr 警告
+- **AC21**: 项目可启动 (`python -m cccode`)、所有单元测试通过 (`pytest`)、lint 通过 (`ruff check`)
+- **AC22**: tmux 实跑——`python -m cccode` 启动 + 触发 `isolation:worktree` 子 Agent 改文件 + 验证主目录 `server.py`(若改的是 `server.py`)未变,Worktree 副本里 `server.py` 已变;Worktree 留盘 / 自动清理符合预期

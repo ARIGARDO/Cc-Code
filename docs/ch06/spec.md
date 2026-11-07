@@ -6,7 +6,7 @@
 
 ## 2. 目标
 
-对外提供 `mewcode.permissions.PermissionChecker`：调用者构造好 `DangerousCommandDetector` + `PathSandbox` + `RuleEngine` + `PermissionMode`，对任意 `mewcode.tools.base.Tool` + `arguments` 调一次 `check(...)`，拿回 `Decision(effect, reason)`。Agent Loop 根据这个 `Decision` 决定直接执行 / 直接拒绝 / 走 HITL（产出 `PermissionRequest` 事件，由 TUI 渲染并交还 `PermissionResponse`）。权限模式覆盖 default / acceptEdits / plan / bypassPermissions / custom / dontAsk 六种，TUI 用 Shift+Tab 或 `/mode` 切换；Plan 模式拥有特殊豁免分支。HITL 用户选「Allow Always」时把规则 append 到本地 YAML 规则文件。
+对外提供 `cccode.permissions.PermissionChecker`：调用者构造好 `DangerousCommandDetector` + `PathSandbox` + `RuleEngine` + `PermissionMode`，对任意 `cccode.tools.base.Tool` + `arguments` 调一次 `check(...)`，拿回 `Decision(effect, reason)`。Agent Loop 根据这个 `Decision` 决定直接执行 / 直接拒绝 / 走 HITL（产出 `PermissionRequest` 事件，由 TUI 渲染并交还 `PermissionResponse`）。权限模式覆盖 default / acceptEdits / plan / bypassPermissions / custom / dontAsk 六种，TUI 用 Shift+Tab 或 `/mode` 切换；Plan 模式拥有特殊豁免分支。HITL 用户选「Allow Always」时把规则 append 到本地 YAML 规则文件。
 
 ## 3. 功能需求
 
@@ -22,7 +22,7 @@
 
 ## 4. 非功能需求
 
-- N1: 危险命令模式必须硬编码进 `mewcode/permissions/dangerous.py` 的 `_DANGEROUS_PATTERNS`，不依赖外部下载或环境变量注入，避免被攻击者绕过。
+- N1: 危险命令模式必须硬编码进 `cccode/permissions/dangerous.py` 的 `_DANGEROUS_PATTERNS`，不依赖外部下载或环境变量注入，避免被攻击者绕过。
 - N2: 路径沙箱必须始终包含项目根 + `tempfile.gettempdir()`；额外路径在 `__init__` 时一次性 `Path.resolve()`，沙箱检查时再 `resolve(strict=True)` 解析符号链接，防止 symlink 换路径逃逸。
 - N3: 规则文件解析必须在 YAML 语法错误 / 文件不存在 / 非列表结构 / 单条坏规则时静默跳过，不让单个坏规则导致整套规则失效（`_load_rules_file` 用 `try/except yaml.YAMLError, OSError` 兜底）。
 - N4: `PermissionChecker.check` 是无副作用纯函数（除规则文件磁盘读），只读，不修改任何 in-memory 状态。
@@ -45,14 +45,14 @@
  - 走 `rule_engine.evaluate`，命中按 effect 决定。
  - 落到 `mode_decide(self.mode, tool.category)` 兜底（`"allow"` / `"deny"` / `"ask"`）。
 - 调用链:
- - `MewCodeApp._build_agent` 装配 → 构造 `PermissionChecker` + `PathSandbox` + `RuleEngine` → 传给 `Agent`。
+ - `CcCodeApp._build_agent` 装配 → 构造 `PermissionChecker` + `PathSandbox` + `RuleEngine` → 传给 `Agent`。
  - `Agent._execute_tool` 执行工具前 → `self.permission_checker.check(...)` → `deny` 返回 `ToolResult(is_error=True)` / `ask` `yield PermissionRequest(...)` 走 HITL / `allow` 继续。
  - HITL 选 `ALLOW_ALWAYS` → `extract_content` + 截断 → `rule_engine.append_local_rule(rule)` 写本地。
  - `/plan` 命令切到 `PermissionMode.PLAN` + Agent 自动生成 `_plan_path_cache` 设置 `permission_checker.plan_file_path`；`/do` 通过 `PlanChoice.YOLO` / `PlanChoice.MANUAL` 还原模式。
 - 与其他模块的交互:
- - 依赖 `mewcode.tools.base.Tool`（`name`、`category` 字段）。
+ - 依赖 `cccode.tools.base.Tool`（`name`、`category` 字段）。
  - 依赖 `PyYAML` 做规则文件序列化。
- - 被 `mewcode.agent.Agent`、`mewcode.app.MewCodeApp`、`mewcode.permission_dialog.InlinePermissionWidget` 直接使用；子 Agent（`mewcode.agents.fork`）继承父 Agent 的 `permission_checker`。
+ - 被 `cccode.agent.Agent`、`cccode.app.CcCodeApp`、`cccode.permission_dialog.InlinePermissionWidget` 直接使用；子 Agent（`cccode.agents.fork`）继承父 Agent 的 `permission_checker`。
 
 ## 6. Out of Scope
 

@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 import pytest
 
-from mewcode.agent import (
+from cccode.agent import (
     Agent,
     AgentEvent,
     HookEvent,
@@ -23,7 +23,7 @@ from mewcode.agent import (
     TurnComplete,
     partition_tool_calls,
 )
-from mewcode.client import (
+from cccode.client import (
     AuthenticationError,
     LLMClient,
     LLMError,
@@ -31,15 +31,15 @@ from mewcode.client import (
     RateLimitError,
     create_client,
 )
-from mewcode.config import ProviderConfig
-from mewcode.conversation import (
+from cccode.config import ProviderConfig
+from cccode.conversation import (
     ConversationManager,
     Message,
     ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
 )
-from mewcode.tools.base import (
+from cccode.tools.base import (
     StreamEnd,
     StreamEvent,
     TextDelta,
@@ -49,7 +49,7 @@ from mewcode.tools.base import (
     ToolCallDelta,
     ToolCallStart,
 )
-from mewcode.tools import ToolRegistry, create_default_registry
+from cccode.tools import ToolRegistry, create_default_registry
 
 
 # ──────────────────────────────────────────────
@@ -587,19 +587,19 @@ class TestConversationManager:
 
 class TestAdaptiveThinking:
     def test_supports_adaptive_thinking_opus_4_6(self) -> None:
-        from mewcode.client import _supports_adaptive_thinking
+        from cccode.client import _supports_adaptive_thinking
         assert _supports_adaptive_thinking("claude-opus-4-6-20250514") is True
 
     def test_supports_adaptive_thinking_sonnet_4_6(self) -> None:
-        from mewcode.client import _supports_adaptive_thinking
+        from cccode.client import _supports_adaptive_thinking
         assert _supports_adaptive_thinking("claude-sonnet-4-6-20250514") is True
 
     def test_supports_adaptive_thinking_sonnet_4_5(self) -> None:
-        from mewcode.client import _supports_adaptive_thinking
+        from cccode.client import _supports_adaptive_thinking
         assert _supports_adaptive_thinking("claude-sonnet-4-5-20251001") is False
 
     def test_supports_adaptive_thinking_haiku(self) -> None:
-        from mewcode.client import _supports_adaptive_thinking
+        from cccode.client import _supports_adaptive_thinking
         assert _supports_adaptive_thinking("claude-haiku-4-5-20251001") is False
 
 
@@ -609,22 +609,22 @@ class TestAdaptiveThinking:
 
 class TestModelMapping:
     def test_haiku_maps_to_full_id(self) -> None:
-        from mewcode.tools.agent_tool import MODEL_MAP
+        from cccode.tools.agent_tool import MODEL_MAP
         assert "haiku" in MODEL_MAP
         assert "haiku" in MODEL_MAP["haiku"]
 
     def test_sonnet_maps_to_full_id(self) -> None:
-        from mewcode.tools.agent_tool import MODEL_MAP
+        from cccode.tools.agent_tool import MODEL_MAP
         assert "sonnet" in MODEL_MAP
         assert "sonnet" in MODEL_MAP["sonnet"]
 
     def test_opus_maps_to_full_id(self) -> None:
-        from mewcode.tools.agent_tool import MODEL_MAP
+        from cccode.tools.agent_tool import MODEL_MAP
         assert "opus" in MODEL_MAP
         assert "opus" in MODEL_MAP["opus"]
 
     def test_create_client_for_model_returns_client(self) -> None:
-        from mewcode.tools.agent_tool import _create_client_for_model
+        from cccode.tools.agent_tool import _create_client_for_model
         parent = ProviderConfig(protocol="openai", api_key="sk-test")
         client = _create_client_for_model("haiku", parent)
         assert isinstance(client, LLMClient)
@@ -637,7 +637,7 @@ class TestModelMapping:
 class TestReadFile:
     @pytest.mark.asyncio
     async def test_read_existing_file(self) -> None:
-        from mewcode.tools.read_file import ReadFile, Params
+        from cccode.tools.read_file import ReadFile, Params
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("line1\nline2\nline3\n")
             tmp_path = f.name
@@ -652,7 +652,7 @@ class TestReadFile:
 
     @pytest.mark.asyncio
     async def test_file_not_found(self) -> None:
-        from mewcode.tools.read_file import ReadFile, Params
+        from cccode.tools.read_file import ReadFile, Params
         tool = ReadFile()
         result = await tool.execute(Params(file_path="/nonexistent/file.txt"))
         assert result.is_error
@@ -660,7 +660,7 @@ class TestReadFile:
 
     @pytest.mark.asyncio
     async def test_offset_limit(self) -> None:
-        from mewcode.tools.read_file import ReadFile, Params
+        from cccode.tools.read_file import ReadFile, Params
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("a\nb\nc\nd\ne\n")
             tmp_path = f.name
@@ -678,7 +678,7 @@ class TestReadFile:
 class TestWriteFile:
     @pytest.mark.asyncio
     async def test_write_creates_dirs(self) -> None:
-        from mewcode.tools.write_file import WriteFile, Params
+        from cccode.tools.write_file import WriteFile, Params
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = str(Path(tmpdir) / "sub" / "nested" / "test.txt")
             tool = WriteFile()
@@ -690,7 +690,7 @@ class TestWriteFile:
 class TestEditFile:
     @pytest.mark.asyncio
     async def test_unique_replace(self) -> None:
-        from mewcode.tools.edit_file import EditFile, Params
+        from cccode.tools.edit_file import EditFile, Params
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("hello world")
             tmp_path = f.name
@@ -706,7 +706,7 @@ class TestEditFile:
 
     @pytest.mark.asyncio
     async def test_not_found(self) -> None:
-        from mewcode.tools.edit_file import EditFile, Params
+        from cccode.tools.edit_file import EditFile, Params
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("abc")
             tmp_path = f.name
@@ -722,7 +722,7 @@ class TestEditFile:
 
     @pytest.mark.asyncio
     async def test_multiple_matches(self) -> None:
-        from mewcode.tools.edit_file import EditFile, Params
+        from cccode.tools.edit_file import EditFile, Params
         with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("dup dup")
             tmp_path = f.name
@@ -740,7 +740,7 @@ class TestEditFile:
 class TestBash:
     @pytest.mark.asyncio
     async def test_simple_command(self) -> None:
-        from mewcode.tools.bash import Bash, Params
+        from cccode.tools.bash import Bash, Params
         tool = Bash()
         result = await tool.execute(Params(command="echo hello"))
         assert not result.is_error
@@ -749,7 +749,7 @@ class TestBash:
 
     @pytest.mark.asyncio
     async def test_stderr_is_error(self) -> None:
-        from mewcode.tools.bash import Bash, Params
+        from cccode.tools.bash import Bash, Params
         tool = Bash()
         result = await tool.execute(Params(command="cat /nonexistent_file_xyz"))
         assert result.is_error
@@ -759,7 +759,7 @@ class TestBash:
 class TestGlob:
     @pytest.mark.asyncio
     async def test_finds_files(self) -> None:
-        from mewcode.tools.glob import Glob, Params
+        from cccode.tools.glob import Glob, Params
         with tempfile.TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "a.py").write_text("")
             (Path(tmpdir) / "b.txt").write_text("")
@@ -773,7 +773,7 @@ class TestGlob:
 
     @pytest.mark.asyncio
     async def test_no_matches(self) -> None:
-        from mewcode.tools.glob import Glob, Params
+        from cccode.tools.glob import Glob, Params
         with tempfile.TemporaryDirectory() as tmpdir:
             tool = Glob()
             result = await tool.execute(Params(pattern="*.xyz", path=tmpdir))
@@ -784,7 +784,7 @@ class TestGlob:
 class TestGrep:
     @pytest.mark.asyncio
     async def test_finds_pattern(self) -> None:
-        from mewcode.tools.grep import Grep, Params
+        from cccode.tools.grep import Grep, Params
         with tempfile.TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "f.py").write_text("def foo():\n    pass\n")
             (Path(tmpdir) / "g.py").write_text("x = 1\n")
@@ -795,7 +795,7 @@ class TestGrep:
 
     @pytest.mark.asyncio
     async def test_no_matches(self) -> None:
-        from mewcode.tools.grep import Grep, Params
+        from cccode.tools.grep import Grep, Params
         with tempfile.TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "f.py").write_text("x = 1\n")
             tool = Grep()
@@ -805,7 +805,7 @@ class TestGrep:
 
     @pytest.mark.asyncio
     async def test_invalid_regex(self) -> None:
-        from mewcode.tools.grep import Grep, Params
+        from cccode.tools.grep import Grep, Params
         tool = Grep()
         result = await tool.execute(Params(pattern="[invalid"))
         assert result.is_error
@@ -815,14 +815,14 @@ class TestGrep:
 class TestToolRegistry:
     def test_register_and_get(self) -> None:
         registry = ToolRegistry()
-        from mewcode.tools.read_file import ReadFile
+        from cccode.tools.read_file import ReadFile
         tool = ReadFile()
         registry.register(tool)
         assert registry.get("ReadFile") is tool
 
     def test_disable_enable(self) -> None:
         registry = ToolRegistry()
-        from mewcode.tools.read_file import ReadFile
+        from cccode.tools.read_file import ReadFile
         registry.register(ReadFile())
         assert registry.is_enabled("ReadFile")
         registry.disable("ReadFile")
@@ -847,7 +847,7 @@ class TestToolRegistry:
 
     def test_deferred_tool_hidden(self) -> None:
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
         schemas = registry.get_all_schemas("anthropic")
         names = [s["name"] for s in schemas]
@@ -855,7 +855,7 @@ class TestToolRegistry:
 
     def test_deferred_after_discovery(self) -> None:
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
         registry.mark_discovered("AskUserQuestion")
         schemas = registry.get_all_schemas("anthropic")
@@ -864,7 +864,7 @@ class TestToolRegistry:
 
     def test_search_deferred(self) -> None:
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
         results = registry.search_deferred("ask user")
         assert len(results) >= 1
@@ -872,7 +872,7 @@ class TestToolRegistry:
 
     def test_find_deferred_by_names(self) -> None:
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
         results = registry.find_deferred_by_names(["AskUserQuestion"])
         assert len(results) == 1
@@ -880,7 +880,7 @@ class TestToolRegistry:
 
     def test_get_deferred_tool_names(self) -> None:
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
         names = registry.get_deferred_tool_names()
         assert "AskUserQuestion" in names
@@ -889,9 +889,9 @@ class TestToolRegistry:
 class TestToolSearch:
     @pytest.mark.asyncio
     async def test_search_by_name(self) -> None:
-        from mewcode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
+        from cccode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
 
         tool = ToolSearchTool(registry)
@@ -901,9 +901,9 @@ class TestToolSearch:
 
     @pytest.mark.asyncio
     async def test_select_by_name(self) -> None:
-        from mewcode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
+        from cccode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
 
         tool = ToolSearchTool(registry)
@@ -913,9 +913,9 @@ class TestToolSearch:
 
     @pytest.mark.asyncio
     async def test_no_match_returns_available(self) -> None:
-        from mewcode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
+        from cccode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
         registry = create_default_registry()
-        from mewcode.tools.ask_user import AskUserTool
+        from cccode.tools.ask_user import AskUserTool
         registry.register(AskUserTool())
 
         tool = ToolSearchTool(registry)
@@ -929,13 +929,13 @@ class TestToolSearch:
 
 class TestSystemPrompt:
     def test_build_system_prompt_normal(self) -> None:
-        from mewcode.prompts import build_system_prompt
+        from cccode.prompts import build_system_prompt
         prompt = build_system_prompt(work_dir="/home/user/project")
         assert "CcCode" in prompt
         assert "plan mode" not in prompt.lower()
 
     def test_build_system_prompt_with_custom_instructions(self) -> None:
-        from mewcode.prompts import build_system_prompt
+        from cccode.prompts import build_system_prompt
         prompt = build_system_prompt(
             work_dir="/home/user/project",
             custom_instructions="Always use type hints.",
@@ -943,7 +943,7 @@ class TestSystemPrompt:
         assert "Always use type hints." in prompt
 
     def test_build_system_prompt_with_memory(self) -> None:
-        from mewcode.prompts import build_system_prompt
+        from cccode.prompts import build_system_prompt
         prompt = build_system_prompt(
             work_dir="/home/user/project",
             memory_section="User prefers pytest over unittest.",
@@ -951,7 +951,7 @@ class TestSystemPrompt:
         assert "User prefers pytest over unittest." in prompt
 
     def test_build_plan_mode_reminder_full(self) -> None:
-        from mewcode.prompts import build_plan_mode_reminder
+        from cccode.prompts import build_plan_mode_reminder
         reminder = build_plan_mode_reminder(
             Path("/tmp/plan.md"), plan_exists=False, iteration=1,
         )
@@ -959,21 +959,21 @@ class TestSystemPrompt:
         assert "MUST NOT" in reminder
 
     def test_build_plan_mode_reminder_sparse(self) -> None:
-        from mewcode.prompts import build_plan_mode_reminder
+        from cccode.prompts import build_plan_mode_reminder
         reminder = build_plan_mode_reminder(
             Path("/tmp/plan.md"), plan_exists=False, iteration=8,
         )
         assert "Plan mode still active" in reminder
 
     def test_build_environment_context(self) -> None:
-        from mewcode.prompts import build_environment_context
+        from cccode.prompts import build_environment_context
         ctx = build_environment_context(work_dir="/home/user/project")
         assert "/home/user/project" in ctx
         assert "Operating system" in ctx
         assert "Current time" in ctx
 
     def test_environment_section(self) -> None:
-        from mewcode.prompts import environment_section
+        from cccode.prompts import environment_section
         section = environment_section(work_dir="/home/user/project")
         assert section.priority == 70
         assert section.name == "Environment"
@@ -982,12 +982,12 @@ class TestSystemPrompt:
         assert "Date" in section.content
 
     def test_prompt_builder_empty(self) -> None:
-        from mewcode.prompts import PromptBuilder
+        from cccode.prompts import PromptBuilder
         builder = PromptBuilder()
         assert builder.build() == ""
 
     def test_prompt_builder_sorts_by_priority(self) -> None:
-        from mewcode.prompts import PromptBuilder, PromptSection
+        from cccode.prompts import PromptBuilder, PromptSection
         builder = PromptBuilder()
         builder.add(PromptSection(name="B", priority=20, content="second"))
         builder.add(PromptSection(name="A", priority=10, content="first"))
@@ -999,7 +999,7 @@ class TestSystemPrompt:
         assert parts[2] == "third"
 
     def test_prompt_builder_skips_empty(self) -> None:
-        from mewcode.prompts import PromptBuilder, PromptSection
+        from cccode.prompts import PromptBuilder, PromptSection
         builder = PromptBuilder()
         builder.add(PromptSection(name="A", priority=10, content=""))
         builder.add(PromptSection(name="B", priority=20, content="  "))
@@ -1008,7 +1008,7 @@ class TestSystemPrompt:
         assert result == "real"
 
     def test_prompt_builder_chainable(self) -> None:
-        from mewcode.prompts import PromptBuilder, PromptSection
+        from cccode.prompts import PromptBuilder, PromptSection
         builder = PromptBuilder()
         result = (
             builder
@@ -1020,7 +1020,7 @@ class TestSystemPrompt:
         assert "second" in result
 
     def test_prompt_section_key_fragments(self) -> None:
-        from mewcode.prompts import build_system_prompt
+        from cccode.prompts import build_system_prompt
         prompt = build_system_prompt(work_dir="/home/user/project")
         assert "IMPORTANT: Be careful not to introduce security" in prompt
         assert "<system-reminder>" in prompt
