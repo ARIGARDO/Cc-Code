@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CcCode</title><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-icon">✳</span><span>CcCode</span><span class="brand-tag">AGENT</span></div>
+    <button id="new-chat" class="new-chat"><span>＋</span> 新建对话 <kbd>⌘ K</kbd></button>
+    <div class="side-label">工作空间</div>
+    <div class="workspace"><span class="folder">▱</span><span><strong id="workspace">当前项目</strong><small id="cwd">正在连接</small></span></div>
+    <div class="side-bottom"><span class="status-dot" id="dot"></span><span id="connection">正在连接</span><span class="version">v0.1</span></div>
+  </aside>
+  <main>
+    <header><div><span class="crumb">工作空间</span><span class="separator">/</span><strong>Agent</strong></div><div class="header-right"><span class="model-icon">✳</span><span id="model">连接模型中</span><span class="live-dot"></span></div></header>
+    <div id="scroll" class="scroll"><section id="welcome" class="welcome"><div class="welcome-icon">✳</div><div class="eyebrow">YOUR CODING AGENT</div><h1>今天想构建什么？</h1><p>描述你的想法，CcCode 会帮你探索、规划并完成工作。</p><div class="suggestions"><button data-prompt="请先帮我理解这个项目的结构和主要功能。"><b>⌕</b><span>探索代码库<small>了解项目结构与核心逻辑</small></span><i>↗</i></button><button data-prompt="请检查当前项目有哪些值得改进的地方。"><b>◇</b><span>审查项目<small>发现问题和改进机会</small></span><i>↗</i></button><button data-prompt="请帮我规划一个功能实现方案。"><b>▤</b><span>规划功能<small>把想法拆解为可执行步骤</small></span><i>↗</i></button></div></section><section id="messages" class="messages" aria-live="polite"></section></div>
+    <div class="composer-area"><div id="interaction"></div><form id="form" class="composer"><textarea id="input" rows="1" placeholder="描述你想完成的任务..." aria-label="输入消息"></textarea><div class="composer-bottom"><div class="controls"><span class="composer-label">✳ CcCode</span><span class="control-separator"></span><label><span class="sr-only">权限模式</span><select id="mode"><option value="default">默认权限</option><option value="acceptEdits">自动接受编辑</option><option value="plan">计划模式</option><option value="dontAsk">不询问</option><option value="bypassPermissions">跳过权限</option><option value="custom">自定义</option></select></label></div><div class="send-group"><span class="hint">Enter 发送 · Shift + Enter 换行</span><button type="button" id="stop" class="stop" hidden>■ 停止</button><button type="submit" id="send" class="send" aria-label="发送消息">↑</button></div></div></form><div class="footnote">CcCode 可以操作本地文件，请检查重要更改。</div></div>
+  </main>
+</div><script src="/static/app.js" defer></script>
+</body></html>

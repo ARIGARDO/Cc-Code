@@ -2,7 +2,7 @@
 
 一个基于 Python 构建的终端 AI 编程助手，设计灵感来自 Claude Code。
 
-CcCode 提供基于 Textual 的交互式 TUI 界面，通过与 LLM 对话来辅助软件工程任务——直接在终端中阅读、编写、搜索和编辑代码。
+CcCode 提供本地浏览器界面，通过与 LLM 对话来辅助软件工程任务——阅读、编写、搜索和编辑代码。也可使用 Textual 终端界面。
 
 ## 功能特性
 
@@ -63,6 +63,8 @@ providers:
 ```bash
 python -m cccode
 ```
+
+在浏览器中打开 `http://127.0.0.1:8765`。服务仅监听本机。输入 `/help` 可以查看命令；终端界面仍可通过 `python -m cccode --tui` 启动。
 
 ### 从旧名称迁移
 
