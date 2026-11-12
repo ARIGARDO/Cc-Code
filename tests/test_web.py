@@ -98,3 +98,43 @@ async def test_real_runtime_initializes_without_terminal(monkeypatch, tmp_path):
         assert message["type"] == "ready", message
         assert message["model"] == "test-model"
         await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_stream_events_arrive_before_agent_finishes(monkeypatch, tmp_path):
+    from cccode.agent import ThinkingText
+    monkeypatch.chdir(tmp_path)
+    release = asyncio.Event()
+
+    class StreamingAgent:
+        async def run(self, conversation):
+            yield ThinkingText("思考中")
+            yield StreamText("第一段")
+            await release.wait()
+            yield StreamText("第二段")
+            yield LoopComplete("end_turn")
+
+    async def start(runtime):
+        runtime.agent = StreamingAgent()
+        await runtime.send("ready", model="test", cwd=str(tmp_path), mode="default")
+
+    monkeypatch.setattr(server.BrowserRuntime, "start", start)
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url("/")).rstrip("/")
+        ws = await client.ws_connect("/ws", headers={"Origin": origin})
+        await ws.receive_json()
+        await ws.send_json({"type": "message", "text": "测试"})
+        first = []
+        while len(first) < 2:
+            event = await asyncio.wait_for(ws.receive_json(), 3)
+            if event["type"] == "agent_event":
+                first.append(event)
+        assert [e["event"] for e in first] == ["ThinkingText", "StreamText"]
+        assert first[1]["data"]["text"] == "第一段"
+        release.set()
+        while True:
+            event = await asyncio.wait_for(ws.receive_json(), 3)
+            if event.get("event") == "StreamText":
+                assert event["data"]["text"] == "第二段"
+                break
+        await ws.close()

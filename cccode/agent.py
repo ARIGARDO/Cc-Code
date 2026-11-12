@@ -246,7 +246,6 @@ class StreamCollector:
                 self.thinking_blocks.append(
                     ThinkingBlock(thinking=event.thinking, signature=event.signature)
                 )
-                self.text += event.thinking
 
             elif isinstance(event, ToolCallStart):
                 pending_tools[event.tool_id] = (event.tool_name, "")

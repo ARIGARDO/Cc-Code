@@ -204,7 +204,8 @@ class TestStreamCollector:
         resp = collector.response()
         assert len(resp.thinking_blocks) == 1
         assert resp.thinking_blocks[0].signature == "sig_abc"
-        assert "Let me think about this" in resp.text
+        assert resp.text == "Answer"
+        assert resp.thinking_blocks[0].thinking == "Let me think about this"
 
 
 # ──────────────────────────────────────────────

@@ -151,6 +151,7 @@ class AnthropicClient(LLMClient):
         tools: Optional[list[dict[str, Any]]],
     ) -> AsyncIterator[StreamEvent]:
         import anthropic
+        import httpx
 
         messages = conversation.serialize("anthropic")
         _mark_last_user_tail_for_cache(messages)
@@ -247,6 +248,8 @@ class AnthropicClient(LLMClient):
             raise RateLimitError(str(e), retry_after=retry_after) from e
         except anthropic.APIConnectionError as e:
             raise NetworkError(str(e)) from e
+        except httpx.TransportError as e:
+            raise NetworkError("模型服务的流式连接中断，请检查网络或服务状态后重试。") from e
         except anthropic.APIStatusError as e:
             raise LLMError(f"API error ({e.status_code}): {e.message}") from e
 
@@ -281,6 +284,7 @@ class OpenAIClient(LLMClient):
         tools: Optional[list[dict[str, Any]]],
     ) -> AsyncIterator[StreamEvent]:
         import openai
+        import httpx
 
         input_items = conversation.serialize("openai")
 
@@ -406,6 +410,8 @@ class OpenAIClient(LLMClient):
             raise RateLimitError(str(e), retry_after=retry_after) from e
         except openai.APIConnectionError as e:
             raise NetworkError(str(e)) from e
+        except httpx.TransportError as e:
+            raise NetworkError("模型服务的流式连接中断，请检查网络或服务状态后重试。") from e
         except openai.APIStatusError as e:
             raise LLMError(f"API error ({e.status_code}): {e.message}") from e
 
