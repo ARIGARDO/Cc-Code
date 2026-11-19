@@ -166,9 +166,15 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
         raise web.HTTPForbidden(text="Invalid origin")
     ws = web.WebSocketResponse(max_msg_size=1024 * 1024, heartbeat=30)
     await ws.prepare(request)
-    config = load_config(Path("config.yaml"))
-    runtime = BrowserRuntime(ws, {"providers": config.providers}, mcp_servers=config.mcp_servers, hook_engine=HookEngine(load_hooks(config.raw_hooks)))
+    runtime = None
     try:
+        try:
+            config = load_config(Path("config.yaml"))
+        except Exception as exc:
+            logger.warning("Invalid configuration: %s", type(exc).__name__)
+            await ws.send_json({"type": "error", "message": "配置加载失败，请检查 config.yaml 的格式和配置项。"})
+            return ws
+        runtime = BrowserRuntime(ws, {"providers": config.providers}, mcp_servers=config.mcp_servers, hook_engine=HookEngine(load_hooks(config.raw_hooks)))
         await runtime.start()
         async for message in ws:
             if message.type != WSMsgType.TEXT:
@@ -202,9 +208,11 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                 await runtime.send("error", message="无效的请求。")
     except Exception as exc:
         logger.exception("Browser startup failed")
-        await runtime.send("error", message=str(exc))
+        if not ws.closed:
+            await ws.send_json({"type": "error", "message": f"启动失败：{exc}"})
     finally:
-        await runtime.close()
+        if runtime is not None:
+            await runtime.close()
         await ws.close()
     return ws
 

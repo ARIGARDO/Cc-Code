@@ -138,3 +138,17 @@ async def test_stream_events_arrive_before_agent_finishes(monkeypatch, tmp_path)
                 assert event["data"]["text"] == "第二段"
                 break
         await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_invalid_config_reports_error_without_exposing_contents(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.yaml").write_text("providers: [\n  secret-value: [", encoding="utf-8")
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url("/")).rstrip("/")
+        ws = await client.ws_connect("/ws", headers={"Origin": origin})
+        message = await asyncio.wait_for(ws.receive_json(), 3)
+        assert message["type"] == "error"
+        assert "配置加载失败" in message["message"]
+        assert "secret-value" not in message["message"]
+        await ws.close()
