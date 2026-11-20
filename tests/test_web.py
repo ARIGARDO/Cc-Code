@@ -152,3 +152,31 @@ async def test_invalid_config_reports_error_without_exposing_contents(monkeypatc
         assert "配置加载失败" in message["message"]
         assert "secret-value" not in message["message"]
         await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_session_history_resume_uses_existing_session_store(tmp_path):
+    from cccode.conversation import Message
+    from cccode.memory import SessionManager
+
+    class Socket:
+        closed = False
+        def __init__(self): self.events = []
+        async def send_json(self, data): self.events.append(data)
+
+    socket = Socket()
+    runtime = server.BrowserRuntime(socket, {})
+    runtime.session_manager = SessionManager(tmp_path)
+    original = runtime.session_manager.create()
+    original.append(Message(role="user", content="第一段对话"))
+    original.append(Message(role="assistant", content="第一段回答"))
+    original_id = original.session_id
+    original.close()
+    runtime.session = runtime.session_manager.create()
+    await runtime.send_sessions()
+    assert original_id in [s["id"] for s in socket.events[-1]["sessions"]]
+    await runtime.resume_session(original_id)
+    restored = next(event for event in socket.events if event["type"] == "restore")
+    assert [message["text"] for message in restored["messages"]] == ["第一段对话", "第一段回答"]
+    assert runtime.session.session_id == original_id
+    await runtime.close()

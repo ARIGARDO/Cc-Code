@@ -61,6 +61,30 @@ class BrowserRuntime(CcCodeApp):
     def _render_restored(self) -> None:
         self.emit("restore", messages=[{"role": m.role, "text": m.content} for m in self.conversation.history if m.role in ("user", "assistant") and m.content])
 
+    async def send_sessions(self) -> None:
+        if not self.session_manager:
+            return
+        await self.send("sessions", current=self.session.session_id if self.session else "", sessions=[
+            {"id": meta.id, "title": meta.title or "新对话", "last_active": meta.last_active.isoformat()}
+            for meta in self.session_manager.list() if meta.message_count or (self.session and meta.id == self.session.session_id)
+        ])
+
+    async def resume_session(self, session_id: str) -> None:
+        if not self.session_manager or not any(meta.id == session_id for meta in self.session_manager.list()):
+            await self.send("error", message="找不到该会话。")
+            return
+        result = self.session_manager.resume(session_id)
+        if result is None:
+            await self.send("error", message="无法恢复该会话。")
+            return
+        if self.session:
+            self.session.close()
+        self.session = result.session
+        self.conversation.replace_history(result.messages)
+        self._mcp_reminder_injected = False
+        await self.send("restore", messages=[{"role": m.role, "text": m.content} for m in result.messages if m.role in ("user", "assistant") and m.content])
+        await self.send_sessions()
+
     def _ui_controller(self) -> Any:
         ui = super()._ui_controller()
         ui.send_user_message = lambda text: setattr(self, "command_prompt", text)
@@ -79,6 +103,7 @@ class BrowserRuntime(CcCodeApp):
         if self._mcp_server_configs:
             await self._init_mcp()
         await self.send("ready", model=self._provider.model if self._provider else "", cwd=str(self._work_dir), mode=self.agent.permission_mode.value)
+        await self.send_sessions()
 
     async def watch_questions(self) -> None:
         tool = self.registry.get("AskUserQuestion")
@@ -101,6 +126,7 @@ class BrowserRuntime(CcCodeApp):
                 self.conversation.clear()
                 self.agent.clear_active_skills()
                 await self.send("clear")
+                await self.send_sessions()
                 return
             if text.startswith("/"):
                 self.command_prompt = None
@@ -114,6 +140,7 @@ class BrowserRuntime(CcCodeApp):
             self.conversation.add_user_message(text)
             if self.session:
                 self.session.append(Message(role="user", content=text))
+                await self.send_sessions()
             before = len(self.conversation.history)
             with with_cwd(self._effective_cwd()):
                 async for event in self.agent.run(self.conversation):
@@ -186,6 +213,8 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                     text = data["text"].strip()
                     if text and not runtime.running:
                         runtime.running = asyncio.create_task(runtime.process(text))
+                elif kind == "resume" and isinstance(data.get("session_id"), str) and not runtime.running:
+                    await runtime.resume_session(data["session_id"])
                 elif kind == "stop" and runtime.running:
                     runtime.running.cancel()
                 elif kind == "permission" and runtime.permission and not runtime.permission.done():
