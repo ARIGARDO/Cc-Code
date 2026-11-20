@@ -180,3 +180,48 @@ async def test_session_history_resume_uses_existing_session_store(tmp_path):
     assert [message["text"] for message in restored["messages"]] == ["第一段对话", "第一段回答"]
     assert runtime.session.session_id == original_id
     await runtime.close()
+
+
+@pytest.mark.asyncio
+async def test_session_history_through_websocket(monkeypatch, tmp_path):
+    from cccode.memory import SessionManager
+    monkeypatch.chdir(tmp_path)
+
+    class SessionAgent:
+        async def run(self, conversation):
+            conversation.add_assistant_message(content="已收到")
+            yield StreamText("已收到")
+            yield LoopComplete("end_turn")
+        def clear_active_skills(self):
+            pass
+
+    async def start(runtime):
+        runtime.agent = SessionAgent()
+        runtime.session_manager = SessionManager(tmp_path)
+        runtime.session = runtime.session_manager.create()
+        await runtime.send("ready", model="test", cwd=str(tmp_path), mode="default")
+        await runtime.send_sessions()
+
+    monkeypatch.setattr(server.BrowserRuntime, "start", start)
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url("/")).rstrip("/")
+        ws = await client.ws_connect("/ws", headers={"Origin": origin})
+        assert (await ws.receive_json())["type"] == "ready"
+        original = (await ws.receive_json())["current"]
+        await ws.send_json({"type": "message", "text": "原会话"})
+        while True:
+            event = await asyncio.wait_for(ws.receive_json(), 3)
+            if event["type"] == "busy" and not event["busy"]:
+                break
+        await ws.send_json({"type": "message", "text": "/new"})
+        while True:
+            event = await asyncio.wait_for(ws.receive_json(), 3)
+            if event["type"] == "sessions":
+                assert any(s["id"] == original and s["title"] == "原会话" for s in event["sessions"])
+            if event["type"] == "busy" and not event["busy"]:
+                break
+        await ws.send_json({"type": "resume", "session_id": original})
+        restored = await asyncio.wait_for(ws.receive_json(), 3)
+        assert restored["type"] == "restore"
+        assert [m["text"] for m in restored["messages"]] == ["原会话", "已收到"]
+        await ws.close()

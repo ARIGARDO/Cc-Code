@@ -125,6 +125,7 @@ class BrowserRuntime(CcCodeApp):
                 self.session = self.session_manager.create() if self.session_manager else None
                 self.conversation.clear()
                 self.agent.clear_active_skills()
+                self._mcp_reminder_injected = False
                 await self.send("clear")
                 await self.send_sessions()
                 return
