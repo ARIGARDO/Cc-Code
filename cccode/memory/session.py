@@ -16,6 +16,7 @@ from cccode.conversation import (
     Message,
     ToolResultBlock,
     ToolUseBlock,
+    ThinkingBlock,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,8 +93,10 @@ class SessionRecord:
                 ))
             return records
 
-        if message.role == "assistant" and message.tool_uses:
+        if message.role == "assistant" and (message.tool_uses or message.thinking_blocks):
             content_blocks: list[dict[str, Any]] = []
+            for tb in message.thinking_blocks:
+                content_blocks.append({"type": "thinking", "thinking": tb.thinking, "signature": tb.signature})
             if message.content:
                 content_blocks.append({"type": "text", "text": message.content})
             for tu in message.tool_uses:
@@ -164,10 +167,13 @@ def records_to_messages(records: list[SessionRecord]) -> list[Message]:
             if isinstance(rec.content, list):
                 text_parts: list[str] = []
                 tool_uses: list[ToolUseBlock] = []
+                thinking_blocks: list[ThinkingBlock] = []
                 for block in rec.content:
                     if isinstance(block, dict):
                         if block.get("type") == "text":
                             text_parts.append(block.get("text", ""))
+                        elif block.get("type") == "thinking":
+                            thinking_blocks.append(ThinkingBlock(thinking=block.get("thinking", ""), signature=block.get("signature", "")))
                         elif block.get("type") == "tool_use":
                             tool_uses.append(ToolUseBlock(
                                 id=block.get("id", ""),
@@ -178,6 +184,7 @@ def records_to_messages(records: list[SessionRecord]) -> list[Message]:
                     role="assistant",
                     content="\n".join(text_parts),
                     tool_uses=tool_uses,
+                    thinking_blocks=thinking_blocks,
                 ))
             else:
                 messages.append(Message(

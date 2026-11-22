@@ -59,7 +59,16 @@ class BrowserRuntime(CcCodeApp):
         self.emit("clear")
 
     def _render_restored(self) -> None:
-        self.emit("restore", messages=[{"role": m.role, "text": m.content} for m in self.conversation.history if m.role in ("user", "assistant") and m.content])
+        self.emit("restore", messages=self.restore_messages(self.conversation.history))
+
+    @staticmethod
+    def restore_messages(history: list[Message]) -> list[dict[str, Any]]:
+        return [{"role": m.role, "text": m.content,
+                 "thinking": [b.thinking for b in m.thinking_blocks],
+                 "tool_uses": [asdict(b) for b in m.tool_uses],
+                 "tool_results": [asdict(b) for b in m.tool_results]}
+                for m in history if m.role in ("user", "assistant") and
+                (m.content or m.thinking_blocks or m.tool_uses or m.tool_results)]
 
     async def send_sessions(self) -> None:
         if not self.session_manager:
@@ -82,7 +91,7 @@ class BrowserRuntime(CcCodeApp):
         self.session = result.session
         self.conversation.replace_history(result.messages)
         self._mcp_reminder_injected = False
-        await self.send("restore", messages=[{"role": m.role, "text": m.content} for m in result.messages if m.role in ("user", "assistant") and m.content])
+        await self.send("restore", messages=self.restore_messages(result.messages))
         await self.send_sessions()
 
     def _ui_controller(self) -> Any:
@@ -216,6 +225,23 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                         runtime.running = asyncio.create_task(runtime.process(text))
                 elif kind == "resume" and isinstance(data.get("session_id"), str) and not runtime.running:
                     await runtime.resume_session(data["session_id"])
+                elif kind == "workspace" and isinstance(data.get("path"), str) and not runtime.running:
+                    path = Path(data["path"]).expanduser().resolve()
+                    if not path.is_dir():
+                        await runtime.send("error", message="项目文件夹不存在或不是文件夹。")
+                        continue
+                    candidate = BrowserRuntime(ws, {"providers": config.providers}, mcp_servers=config.mcp_servers, hook_engine=HookEngine(load_hooks(config.raw_hooks)))
+                    candidate._work_dir = path
+                    try:
+                        await candidate.start()
+                    except Exception:
+                        logger.exception("Workspace initialization failed")
+                        await candidate.close()
+                        await runtime.send("error", message="无法打开该项目文件夹，请检查访问权限。")
+                        continue
+                    await runtime.close()
+                    runtime = candidate
+                    await runtime.send("clear")
                 elif kind == "stop" and runtime.running:
                     runtime.running.cancel()
                 elif kind == "permission" and runtime.permission and not runtime.permission.done():

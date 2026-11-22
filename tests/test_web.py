@@ -225,3 +225,46 @@ async def test_session_history_through_websocket(monkeypatch, tmp_path):
         assert restored["type"] == "restore"
         assert [m["text"] for m in restored["messages"]] == ["原会话", "已收到"]
         await ws.close()
+
+
+def test_session_round_trips_thinking_and_tools(tmp_path):
+    from cccode.conversation import Message, ThinkingBlock, ToolUseBlock, ToolResultBlock
+    from cccode.memory import SessionManager
+
+    manager = SessionManager(tmp_path)
+    session = manager.create()
+    session.append(Message(role='user', content='问题'))
+    session.append(Message(role='assistant', content='回答', thinking_blocks=[ThinkingBlock('分析', '签名')], tool_uses=[ToolUseBlock('id', 'Bash', {'command': 'pwd'})]))
+    session.append(Message(role='user', tool_results=[ToolResultBlock('id', '/tmp')]))
+    session_id = session.session_id
+    session.close()
+    restored = manager.resume(session_id)
+    assert restored.messages[1].thinking_blocks[0] == ThinkingBlock('分析', '签名')
+    display = server.BrowserRuntime.restore_messages(restored.messages)
+    assert display[1]['thinking'] == ['分析']
+    assert display[1]['tool_uses'][0]['name'] == 'Bash'
+    assert display[2]['tool_results'][0]['content'] == '/tmp'
+    restored.session.close()
+
+
+@pytest.mark.asyncio
+async def test_workspace_switch_reinitializes_project(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr('cccode.app.create_client', lambda config: object())
+    (tmp_path / 'config.yaml').write_text('providers:\n  - protocol: openai\n    model: test-model\n    api_key: test\n')
+    project = tmp_path / 'another'
+    project.mkdir()
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url('/')).rstrip('/')
+        ws = await client.ws_connect('/ws', headers={'Origin': origin})
+        assert (await ws.receive_json())['type'] == 'ready'
+        await ws.receive_json()
+        await ws.send_json({'type': 'workspace', 'path': str(project)})
+        ready = await asyncio.wait_for(ws.receive_json(), 3)
+        assert ready['type'] == 'ready' and ready['cwd'] == str(project)
+        assert (await ws.receive_json())['type'] == 'sessions'
+        assert (await ws.receive_json())['type'] == 'clear'
+        await ws.send_json({'type': 'workspace', 'path': str(project / 'missing')})
+        assert (await ws.receive_json())['type'] == 'error'
+        await ws.close()
