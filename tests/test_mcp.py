@@ -380,8 +380,7 @@ async def test_mcp_catalogue_exposes_names_until_toolsearch(monkeypatch, tmp_pat
     runtime._work_dir = tmp_path
     await runtime._init_mcp()
     name = 'mcp_fixture_find'
-    assert runtime._mcp_instructions == 'The following MCP tools are available:\n- ' + name
-    assert 'private tool description' not in runtime._mcp_instructions
+    assert name in runtime.registry.get_deferred_tool_names()
     assert name not in [item['name'] for item in runtime.registry.get_all_schemas()]
     search = ToolSearchTool(runtime.registry)
     result = await search.execute(ToolSearchParams(query='select:' + name))
@@ -413,3 +412,49 @@ async def test_undiscovered_mcp_tool_cannot_execute_until_toolsearch(tmp_path):
     events = [event async for event in agent._execute_tool(call)]
     assert len(events) == 1 and not events[0].is_error
     client.call_tool.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_agent_refreshes_name_only_catalogue_every_model_request(tmp_path):
+    from types import SimpleNamespace
+    from cccode.agent import Agent, LoopComplete
+    from cccode.conversation import ConversationManager
+    from cccode.tools import create_default_registry
+    from cccode.tools.base import StreamEnd, ToolCallComplete
+    from cccode.tools.impl.tool_search import ToolSearchTool
+
+    registry = create_default_registry()
+    registry.register(ToolSearchTool(registry))
+    for name in ('alpha', 'beta'):
+        definition = SimpleNamespace(name=name, description='secret long description '+name, inputSchema={'type':'object','properties':{}})
+        registry.register(MCPToolWrapper('fixture', definition, SimpleNamespace()))
+
+    class Client:
+        def __init__(self): self.requests = []
+        async def stream(self, conversation, system=None, tools=None):
+            self.requests.append((conversation.serialize('anthropic'), [dict(t) for t in tools], [m.content for m in conversation.history if 'deferred tools are available' in m.content]))
+            if len(self.requests) == 1:
+                yield ToolCallComplete('s1', 'ToolSearch', {'query':'select:mcp_fixture_alpha'})
+                yield StreamEnd('tool_use', 1, 1)
+            else:
+                yield StreamEnd('end_turn', 1, 1)
+
+    client = Client()
+    agent = Agent(client, registry, 'anthropic', tmp_path, max_iterations=3)
+    conversation = ConversationManager()
+    conversation.add_user_message('test')
+    events = [event async for event in agent.run(conversation)]
+    assert any(isinstance(event, LoopComplete) for event in events)
+    first, second = client.requests
+    first_text = str(first[0])
+    assert 'mcp_fixture_alpha' in first_text and 'mcp_fixture_beta' in first_text
+    assert 'secret long description' not in first_text
+    assert 'ReadFile' in [t['name'] for t in first[1]] and 'ToolSearch' in [t['name'] for t in first[1]]
+    assert 'mcp_fixture_alpha' not in [t['name'] for t in first[1]]
+    assert 'mcp_fixture_alpha' in [t['name'] for t in second[1]]
+    # Second request includes alpha's discovery result but advertises only beta as deferred.
+    assert len(first[2]) == len(second[2]) == 1
+    assert 'mcp_fixture_beta' in second[2][0]
+    assert 'mcp_fixture_alpha' not in second[2][0]
+    assert 'secret long description' not in second[2][0]
+    assert not any('deferred tools are available' in m.content for m in conversation.history)

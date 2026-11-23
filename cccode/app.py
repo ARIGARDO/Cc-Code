@@ -137,8 +137,6 @@ class CcCodeApp(App):
         self._mcp_server_configs: list[MCPServerConfig] = list(mcp_servers or [])
         self._mcp_manager: Optional[Any] = None
         self._mcp_ready: bool = False
-        self._mcp_instructions: str = ""
-        self._mcp_reminder_injected: bool = False
 
         # Memory system (ch09)
         self.session_manager: Optional[SessionManager] = None
@@ -414,10 +412,6 @@ class CcCodeApp(App):
 
         tool_names = [n for n in self.registry.list_tools() if n.startswith("mcp_")]
         if tool_names:
-            lines = ["The following MCP tools are available:"]
-            for name in tool_names:
-                lines.append(f"- {name}")
-            self._mcp_instructions = "\n".join(lines)
             count = len(self._mcp_server_configs) - len(errors)
             if self._mcp_status:
                 self._mcp_status.set_connected(count, len(tool_names))
@@ -633,9 +627,6 @@ class CcCodeApp(App):
                     break
                 await asyncio.sleep(0.1)
 
-        if self._mcp_instructions and not self._mcp_reminder_injected:
-            self.conversation.add_system_reminder(self._mcp_instructions)
-            self._mcp_reminder_injected = True
 
         self.conversation.add_user_message(user_input)
         self._append_chat_line(f"\x1b[33m> {user_input}\x1b[0m")

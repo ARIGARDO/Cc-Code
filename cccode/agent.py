@@ -596,6 +596,17 @@ class Agent:
                             preview_chars=len(rec.replacement),
                         )
 
+            # Build a fresh name-only catalogue for this request. Keep it out of
+            # persisted history so obsolete lists do not accumulate across turns.
+            deferred_names = self.registry.get_deferred_tool_names()
+            if deferred_names:
+                api_conv.add_system_reminder(
+                    "The following deferred tools are available via ToolSearch. "
+                    "Their schemas are not loaded; use ToolSearch with "
+                    'query "select:<name>[,<name>...]" before calling them:\n'
+                    + "\n".join(deferred_names)
+                )
+
             # Step 7: Stream LLM response
             collector = StreamCollector()
             stream = self.client.stream(api_conv, system=system_prompt, tools=schemas)

@@ -93,7 +93,6 @@ class BrowserRuntime(CcCodeApp):
             self.session.close()
         self.session = result.session
         self.conversation.replace_history(result.messages)
-        self._mcp_reminder_injected = False
         await self.send("restore", messages=self.restore_messages(result.messages))
         await self.send_sessions()
 
@@ -114,7 +113,6 @@ class BrowserRuntime(CcCodeApp):
                 self.conversation.clear()
                 if self.agent:
                     self.agent.clear_active_skills()
-                self._mcp_reminder_injected = False
                 await self.send("clear")
         if not deleted:
             await self.send("error", message="删除会话失败，请检查文件权限。")
@@ -171,7 +169,6 @@ class BrowserRuntime(CcCodeApp):
                 self.session = self.session_manager.create() if self.session_manager else None
                 self.conversation.clear()
                 self.agent.clear_active_skills()
-                self._mcp_reminder_injected = False
                 await self.send("clear")
                 await self.send_sessions()
                 return
@@ -181,9 +178,6 @@ class BrowserRuntime(CcCodeApp):
                     if not self.command_prompt:
                         return
                     text = self.command_prompt
-            if self._mcp_instructions and not self._mcp_reminder_injected:
-                self.conversation.add_system_reminder(self._mcp_instructions)
-                self._mcp_reminder_injected = True
             if getattr(self.agent, "permission_mode", None) == PermissionMode.PLAN:
                 self.conversation.add_system_reminder("在网页中完成计划后直接展示计划并结束回复，网页会提供批准执行或继续规划的选项；不要要求用户手动输入 /do。")
             self.conversation.add_user_message(text)
