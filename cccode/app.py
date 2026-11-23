@@ -416,9 +416,7 @@ class CcCodeApp(App):
         if tool_names:
             lines = ["The following MCP tools are available:"]
             for name in tool_names:
-                tool = self.registry.get(name)
-                desc = tool.description if tool else ""
-                lines.append(f"- {name}: {desc}")
+                lines.append(f"- {name}")
             self._mcp_instructions = "\n".join(lines)
             count = len(self._mcp_server_configs) - len(errors)
             if self._mcp_status:

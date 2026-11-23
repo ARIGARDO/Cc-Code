@@ -800,6 +800,15 @@ class Agent:
             )
             return
 
+        if tool.should_defer and not self.registry.is_discovered(tool_name):
+            yield ToolResultEvent(
+                tool_id=tc.id,
+                tool_name=tool_name,
+                result=f'Error: tool "{tool_name}" has not been discovered. Use ToolSearch with select:{tool_name} before calling it.',
+                is_error=True,
+            )
+            return
+
         # Pre-tool hook
         if self.hook_engine:
             ctx = self._build_hook_context("pre_tool_use", tool_name=tc.name, **tc.arguments)

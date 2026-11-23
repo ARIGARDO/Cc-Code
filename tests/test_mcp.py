@@ -361,3 +361,55 @@ class TestMCPManagerPartialFailure:
         # No client yet
         assert manager.get_client("srv") is not None  # creates one
         assert manager.get_client("nonexistent") is None
+
+@pytest.mark.asyncio
+async def test_mcp_catalogue_exposes_names_until_toolsearch(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from cccode.web.server import BrowserRuntime
+    from cccode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
+
+    definition = SimpleNamespace(name='find', description='A long private tool description', inputSchema={'type':'object','properties':{'query':{'type':'string','description':'Query details'}}})
+    class Manager:
+        def load_configs(self, configs): pass
+        async def register_all_tools(self, registry):
+            registry.register(MCPToolWrapper('fixture', definition, SimpleNamespace()))
+            return []
+        async def shutdown(self): pass
+    monkeypatch.setattr('cccode.mcp.MCPManager', Manager)
+    runtime = BrowserRuntime(SimpleNamespace(closed=False), {})
+    runtime._work_dir = tmp_path
+    await runtime._init_mcp()
+    name = 'mcp_fixture_find'
+    assert runtime._mcp_instructions == 'The following MCP tools are available:\n- ' + name
+    assert 'private tool description' not in runtime._mcp_instructions
+    assert name not in [item['name'] for item in runtime.registry.get_all_schemas()]
+    search = ToolSearchTool(runtime.registry)
+    result = await search.execute(ToolSearchParams(query='select:' + name))
+    assert 'A long private tool description' in result.output
+    assert 'Query details' in result.output
+    assert name in [item['name'] for item in runtime.registry.get_all_schemas()]
+    await runtime._shutdown_mcp()
+
+
+@pytest.mark.asyncio
+async def test_undiscovered_mcp_tool_cannot_execute_until_toolsearch(tmp_path):
+    from types import SimpleNamespace
+    from cccode.agent import Agent, ToolResultEvent
+    from cccode.conversation import ToolUseBlock
+    from cccode.tools.impl.tool_search import ToolSearchTool, ToolSearchParams
+
+    definition = SimpleNamespace(name='read', description='Read a file', inputSchema={'type':'object','properties':{}})
+    response = SimpleNamespace(content=[SimpleNamespace(type='text', text='ok')], isError=False)
+    client = SimpleNamespace(is_alive=True, call_tool=AsyncMock(return_value=response))
+    registry = ToolRegistry()
+    registry.register(MCPToolWrapper('fixture', definition, client))
+    agent = Agent(None, registry, 'anthropic', tmp_path)
+    call = ToolUseBlock('id', 'mcp_fixture_read', {})
+    events = [event async for event in agent._execute_tool(call)]
+    assert len(events) == 1 and isinstance(events[0], ToolResultEvent)
+    assert events[0].is_error and 'ToolSearch' in events[0].result
+    client.call_tool.assert_not_awaited()
+    await ToolSearchTool(registry).execute(ToolSearchParams(query='select:mcp_fixture_read'))
+    events = [event async for event in agent._execute_tool(call)]
+    assert len(events) == 1 and not events[0].is_error
+    client.call_tool.assert_awaited_once()

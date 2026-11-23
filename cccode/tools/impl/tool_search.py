@@ -24,7 +24,7 @@ class ToolSearchParams(BaseModel):
 class ToolSearchTool(Tool):
     name = "ToolSearch"
     description = (
-        "Search for additional tools not in the default list. "
+        "Before calling a listed deferred tool, use ToolSearch to load its definition. "
         "Use 'select:ToolName' to get a specific tool by name, "
         "or pass keywords to search across tool names and descriptions."
     )
