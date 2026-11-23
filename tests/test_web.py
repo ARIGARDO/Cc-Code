@@ -422,3 +422,40 @@ def test_web_permission_menu_has_three_modes():
     assert mode_decide(PermissionMode.DEFAULT, 'write') == 'ask'
     assert mode_decide(PermissionMode.PLAN, 'write') == 'deny'
     assert mode_decide(PermissionMode.BYPASS, 'write') == 'allow'
+
+
+@pytest.mark.asyncio
+async def test_delete_session_over_websocket_removes_files(monkeypatch, tmp_path):
+    from cccode.conversation import Message
+    from cccode.memory import SessionManager
+    monkeypatch.chdir(tmp_path)
+
+    class Agent:
+        def clear_active_skills(self): pass
+
+    async def start(runtime):
+        runtime.agent = Agent()
+        runtime.session_manager = SessionManager(tmp_path)
+        runtime.session = runtime.session_manager.create()
+        runtime.session.append(Message(role='user', content='待删除'))
+        await runtime.send('ready', model='test', cwd=str(tmp_path), mode='default')
+        await runtime.send_sessions()
+
+    monkeypatch.setattr(server.BrowserRuntime, 'start', start)
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url('/')).rstrip('/')
+        ws = await client.ws_connect('/ws', headers={'Origin': origin})
+        await ws.receive_json()
+        session_id = (await ws.receive_json())['current']
+        session_dir = tmp_path / '.cccode' / 'sessions'
+        assert (session_dir / f'{session_id}.jsonl').exists()
+        assert (session_dir / f'{session_id}.meta').exists()
+        await ws.send_json({'type': 'delete_session', 'session_id': session_id})
+        assert (await ws.receive_json())['type'] == 'clear'
+        listing = await ws.receive_json()
+        assert listing['type'] == 'sessions' and listing['current'] != session_id
+        assert all(item['id'] != session_id for item in listing['sessions'])
+        assert (await ws.receive_json()) == {'type': 'session_deleted', 'session_id': session_id}
+        assert not (session_dir / f'{session_id}.jsonl').exists()
+        assert not (session_dir / f'{session_id}.meta').exists()
+        await ws.close()

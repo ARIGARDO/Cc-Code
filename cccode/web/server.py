@@ -116,6 +116,8 @@ class BrowserRuntime(CcCodeApp):
         if not deleted:
             await self.send("error", message="删除会话失败，请检查文件权限。")
         await self.send_sessions()
+        if deleted:
+            await self.send("session_deleted", session_id=session_id)
 
     def _ui_controller(self) -> Any:
         ui = super()._ui_controller()
