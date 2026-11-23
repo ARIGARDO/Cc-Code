@@ -44,9 +44,33 @@ const completionBox = $('completions');
 let completionIndex = 0;
 function hideCompletions() { completionBox.hidden = true; completionBox.replaceChildren(); completionIndex = 0; }
 function selectCompletion(button) { input.value = button.dataset.value + ' '; hideCompletions(); input.focus(); }
-function renderCompletions(msg) { if (msg.query !== input.value || busy || !input.value.startsWith('/')) return; completionBox.replaceChildren(); completionIndex = 0; for (const entry of msg.entries) { const button = el('button', 'completion-option'); button.type = 'button'; button.dataset.value = entry.value; button.setAttribute('role', 'option'); button.append(el('strong', '', entry.value), el('span', '', entry.description)); button.addEventListener('click', () => selectCompletion(button)); completionBox.append(button); } completionBox.hidden = !msg.entries.length; }
+function renderCompletions(msg) {
+  if (msg.query !== input.value || busy || !input.value.startsWith('/')) return;
+  completionBox.replaceChildren(); completionIndex = 0;
+  for (const [group, title] of [['command', '命令'], ['skill', '技能']]) {
+    const entries = msg.entries.filter(entry => entry.group === group);
+    if (!entries.length) continue;
+    completionBox.append(el('div', 'completion-heading', title));
+    for (const entry of entries) {
+      const button = el('button', 'completion-option'); button.type = 'button'; button.dataset.value = entry.value; button.setAttribute('role', 'option');
+      const icon = el('span', 'completion-icon', group === 'skill' ? '◇' : '›');
+      button.append(icon, el('strong', '', entry.value), el('span', 'completion-description', entry.description));
+      if (group === 'skill') button.append(el('span', 'completion-source', ({project:'项目', user:'个人', builtin:'内置'})[entry.source] || '技能'));
+      button.addEventListener('click', () => selectCompletion(button)); completionBox.append(button);
+    }
+  }
+  const options = completionBox.querySelectorAll('.completion-option');
+  if (options.length) { options[0].classList.add('active'); options[0].setAttribute('aria-selected', 'true'); }
+  completionBox.hidden = !options.length;
+}
 input.addEventListener('input', () => { if (!busy && input.value.startsWith('/') && !input.value.includes(' ')) send({type:'complete', text:input.value}); else hideCompletions(); });
-input.addEventListener('keydown', e => { if (completionBox.hidden) return; const options = [...completionBox.children]; if (e.key === 'Escape') { e.preventDefault(); hideCompletions(); } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); completionIndex = (completionIndex + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length; options.forEach((option, i) => option.classList.toggle('active', i === completionIndex)); } else if (e.key === 'Tab') { e.preventDefault(); selectCompletion(options[completionIndex]); } }, true);
+input.addEventListener('keydown', e => {
+  if (completionBox.hidden || e.isComposing) return;
+  const options = [...completionBox.querySelectorAll('.completion-option')];
+  if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); hideCompletions(); }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); completionIndex = (completionIndex + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length; options.forEach((option, i) => { option.classList.toggle('active', i === completionIndex); option.setAttribute('aria-selected', String(i === completionIndex)); }); options[completionIndex].scrollIntoView({block:'nearest'}); }
+  else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); e.stopImmediatePropagation(); selectCompletion(options[completionIndex]); }
+}, true);
 document.addEventListener('click', e => { if (!completionBox.contains(e.target) && e.target !== input) hideCompletions(); });
 const modeMenu = $('mode-menu'), modeTrigger = $('mode-trigger');
 function closeModeMenu() { modeMenu.hidden = true; modeTrigger.setAttribute('aria-expanded', 'false'); }

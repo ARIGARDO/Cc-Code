@@ -285,6 +285,14 @@ async def test_browser_skill_completion(monkeypatch, tmp_path):
         assert result['type'] == 'completions'
         values = [item['value'] for item in result['entries']]
         assert '/skill' in values and '/review' in values
+        await ws.send_json({'type': 'complete', 'text': '/sk'})
+        result = await asyncio.wait_for(ws.receive_json(), 3)
+        skills = [item for item in result['entries'] if item['group'] == 'skill']
+        assert any(item['value'] == '/review' and item['source'] == 'builtin' and item['description'] for item in skills)
+        assert any(item['value'] == '/skill' and item['group'] == 'command' for item in result['entries'])
+        await ws.send_json({'type': 'complete', 'text': '/rev'})
+        result = await asyncio.wait_for(ws.receive_json(), 3)
+        assert [item['value'] for item in result['entries'] if item['group'] == 'skill'] == ['/review']
         await ws.send_json({'type': 'message', 'text': '/skill'})
         events = []
         while True:

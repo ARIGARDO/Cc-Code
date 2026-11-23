@@ -228,11 +228,12 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                 elif kind == "complete" and isinstance(data.get("text"), str):
                     from cccode.commands.parser import complete
                     query = data["text"].strip()
-                    entries = [{"value": value, "description": "命令"} for value in complete(runtime.command_registry, query)]
+                    entries = [{"value": value, "description": runtime.command_registry.find(value[1:]).description, "group": "command"} for value in complete(runtime.command_registry, query)]
                     if query.startswith("/") and " " not in query and getattr(runtime, "skill_loader", None):
                         prefix = query[1:].lower()
-                        skill_prefix = "" if prefix in ("skill", "skills") else prefix
-                        entries.extend({"value": "/" + name, "description": desc} for name, desc in runtime.skill_loader.get_catalog() if name.lower().startswith(skill_prefix) and runtime.command_registry.find(name))
+                        skill_prefix = "" if "skill".startswith(prefix) or prefix == "skills" else prefix
+                        registered = getattr(runtime.command_registry, "_registered_skill_names", set())
+                        entries.extend({"value": "/" + name, "description": desc, "group": "skill", "source": runtime.skill_loader.get_source_label(name)} for name, desc in runtime.skill_loader.get_catalog() if name in registered and name.lower().startswith(skill_prefix))
                     await runtime.send("completions", query=data["text"], entries=entries[:30])
                 elif kind == "workspace" and isinstance(data.get("path"), str) and not runtime.running:
                     path = Path(data["path"]).expanduser().resolve()
