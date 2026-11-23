@@ -55,3 +55,6 @@ coverage.xml
 # OS generated files
 Thumbs.db
 ehthumbs.db
+
+# Local project documentation
+/docs/
