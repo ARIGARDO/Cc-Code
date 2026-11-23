@@ -23,8 +23,19 @@ function renderMarkdown(node, text) {
     }
   };
   const cells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+  const isBlock = line => /^\s*(?:#{1,3}\s|```|(?:-{3,}|\*{3,}|_{3,})\s*$|\|)/.test(line);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (!line.trim()) {
+      const previous = i > 0 ? lines[i - 1] : '';
+      while (i + 1 < lines.length && !lines[i + 1].trim()) i++;
+      const next = lines[i + 1] || '';
+      if (previous.trim() && next.trim() && !isBlock(previous) && !isBlock(next)) node.append(el('div', 'md-gap'));
+      continue;
+    }
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+      node.append(el('hr', 'md-rule')); continue;
+    }
     if (line.trim().startsWith('```')) {
       const code = el('pre', 'code-block');
       while (++i < lines.length && !lines[i].trim().startsWith('```')) code.append(document.createTextNode(lines[i] + '\n'));
@@ -41,7 +52,6 @@ function renderMarkdown(node, text) {
     const row = el(heading ? 'h' + (heading[1].length + 2) : 'div', 'md-line');
     const content = heading ? heading[2] : line;
     inline(row, content);
-    if (!content) row.append(document.createElement('br'));
     node.append(row);
   }
 }
