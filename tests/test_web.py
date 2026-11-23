@@ -459,3 +459,69 @@ async def test_delete_session_over_websocket_removes_files(monkeypatch, tmp_path
         assert not (session_dir / f'{session_id}.jsonl').exists()
         assert not (session_dir / f'{session_id}.meta').exists()
         await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_plan_approval_switches_mode_and_continues_without_extra_message(monkeypatch, tmp_path):
+    from cccode.permissions.modes import PermissionMode
+    monkeypatch.chdir(tmp_path)
+    runs = []
+
+    class Agent:
+        permission_mode = PermissionMode.PLAN
+        def set_permission_mode(self, value): self.permission_mode = value
+        async def run(self, conversation):
+            runs.append((self.permission_mode, conversation.history[-1].content))
+            yield StreamText('计划内容' if self.permission_mode == PermissionMode.PLAN else '继续执行')
+            yield LoopComplete('end_turn')
+
+    async def start(runtime):
+        runtime.agent = Agent()
+        await runtime.send('ready', model='test', cwd=str(tmp_path), mode='plan')
+
+    monkeypatch.setattr(server.BrowserRuntime, 'start', start)
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url('/')).rstrip('/')
+        ws = await client.ws_connect('/ws', headers={'Origin': origin})
+        await ws.receive_json()
+        await ws.send_json({'type':'message', 'text':'创建文件'})
+        while (await asyncio.wait_for(ws.receive_json(), 3))['type'] != 'plan_review': pass
+        assert runs == [(PermissionMode.PLAN, '创建文件')]
+        await ws.send_json({'type':'plan_decision', 'value':'approve'})
+        assert (await ws.receive_json()) == {'type':'status', 'mode':'default'}
+        while True:
+            msg = await asyncio.wait_for(ws.receive_json(), 3)
+            if msg['type'] == 'busy' and not msg['busy']: break
+        assert len(runs) == 2
+        assert runs[1] == (PermissionMode.DEFAULT, '已批准计划，请继续执行之前的任务。')
+        await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_plan_stay_does_not_execute_or_change_mode(monkeypatch, tmp_path):
+    from cccode.permissions.modes import PermissionMode
+    monkeypatch.chdir(tmp_path)
+    runs = []
+    class Agent:
+        permission_mode = PermissionMode.PLAN
+        def set_permission_mode(self, value): self.permission_mode = value
+        async def run(self, conversation):
+            runs.append(self.permission_mode)
+            yield StreamText('计划')
+            yield LoopComplete('end_turn')
+    async def start(runtime):
+        runtime.agent = Agent()
+        await runtime.send('ready', model='test', cwd=str(tmp_path), mode='plan')
+    monkeypatch.setattr(server.BrowserRuntime, 'start', start)
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url('/')).rstrip('/')
+        ws = await client.ws_connect('/ws', headers={'Origin':origin})
+        await ws.receive_json()
+        await ws.send_json({'type':'message', 'text':'请规划'})
+        while (await asyncio.wait_for(ws.receive_json(), 3))['type'] != 'plan_review': pass
+        await ws.send_json({'type':'plan_decision', 'value':'stay'})
+        await ws.send_json({'type':'plan_decision', 'value':'approve'})
+        assert (await asyncio.wait_for(ws.receive_json(), 3))['type'] == 'error'
+        assert (await ws.receive_json())['busy'] is False
+        assert runs == [PermissionMode.PLAN]
+        await ws.close()

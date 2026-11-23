@@ -12,7 +12,8 @@ from urllib.parse import urlparse
 
 from aiohttp import WSMsgType, web
 
-from cccode.agent import PermissionRequest, PermissionResponse
+from cccode.agent import PermissionRequest, PermissionResponse, LoopComplete, StreamText
+from cccode.permissions.modes import PermissionMode
 from cccode.app import CcCodeApp
 from cccode.config import load_config
 from cccode.conversation import Message
@@ -35,6 +36,7 @@ class BrowserRuntime(CcCodeApp):
         self.question_future: asyncio.Future | None = None
         self.question_token: int | None = None
         self.command_prompt: str | None = None
+        self.plan_review_pending = False
 
     async def send(self, kind: str, **data: Any) -> None:
         if not self.ws.closed:
@@ -79,6 +81,7 @@ class BrowserRuntime(CcCodeApp):
         ])
 
     async def resume_session(self, session_id: str) -> None:
+        self.plan_review_pending = False
         if not self.session_manager or not any(meta.id == session_id for meta in self.session_manager.list()):
             await self.send("error", message="找不到该会话。")
             return
@@ -157,6 +160,9 @@ class BrowserRuntime(CcCodeApp):
     async def process(self, text: str) -> None:
         watcher = asyncio.create_task(self.watch_questions())
         before: int | None = None
+        plan_response = False
+        plan_completed = False
+        self.plan_review_pending = False
         try:
             await self.send("busy", busy=True)
             if text == "/new":
@@ -178,6 +184,8 @@ class BrowserRuntime(CcCodeApp):
             if self._mcp_instructions and not self._mcp_reminder_injected:
                 self.conversation.add_system_reminder(self._mcp_instructions)
                 self._mcp_reminder_injected = True
+            if getattr(self.agent, "permission_mode", None) == PermissionMode.PLAN:
+                self.conversation.add_system_reminder("在网页中完成计划后直接展示计划并结束回复，网页会提供批准执行或继续规划的选项；不要要求用户手动输入 /do。")
             self.conversation.add_user_message(text)
             if self.session:
                 self.session.append(Message(role="user", content=text))
@@ -185,6 +193,10 @@ class BrowserRuntime(CcCodeApp):
             before = len(self.conversation.history)
             with with_cwd(self._effective_cwd()):
                 async for event in self.agent.run(self.conversation):
+                    if isinstance(event, StreamText) and event.text.strip():
+                        plan_response = True
+                    if isinstance(event, LoopComplete) and event.stop_reason in ("end_turn", "stop"):
+                        plan_completed = True
                     if isinstance(event, PermissionRequest):
                         self.permission = event.future
                         await self.send("permission", tool=event.tool_name, args=event.tool_args)
@@ -212,6 +224,9 @@ class BrowserRuntime(CcCodeApp):
             self.question_token = None
             self.running = None
             await self.send("busy", busy=False)
+            if plan_response and plan_completed and getattr(self.agent, "permission_mode", None) == PermissionMode.PLAN:
+                self.plan_review_pending = True
+                await self.send("plan_review")
 
     async def close(self) -> None:
         if self.running:
@@ -259,6 +274,17 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                         runtime.running = asyncio.create_task(runtime.process(text))
                 elif kind == "resume" and isinstance(data.get("session_id"), str) and not runtime.running:
                     await runtime.resume_session(data["session_id"])
+                elif kind == "plan_decision" and not runtime.running:
+                    decision = data.get("value")
+                    if runtime.plan_review_pending and decision in ("approve", "stay") and runtime.agent and runtime.agent.permission_mode == PermissionMode.PLAN:
+                        runtime.plan_review_pending = False
+                        if decision == "approve":
+                            runtime.agent.set_permission_mode(PermissionMode.DEFAULT)
+                            await runtime.send("status", mode=PermissionMode.DEFAULT.value)
+                            runtime.running = asyncio.create_task(runtime.process("已批准计划，请继续执行之前的任务。"))
+                    else:
+                        await runtime.send("error", message="计划状态已变化，请重新确认。")
+                        await runtime.send("busy", busy=False)
                 elif kind == "delete_session" and isinstance(data.get("session_id"), str) and not runtime.running:
                     await runtime.delete_session(data["session_id"])
                 elif kind == "complete" and isinstance(data.get("text"), str):
@@ -303,8 +329,8 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                     if isinstance(answers, dict):
                         runtime.question_future.set_result(answers)
                 elif kind == "mode" and runtime.agent and not runtime.running:
-                    from cccode.permissions.modes import PermissionMode
                     try:
+                        runtime.plan_review_pending = False
                         runtime.agent.set_permission_mode(PermissionMode(data.get("value")))
                         runtime._update_mode_bar()
                     except ValueError:
