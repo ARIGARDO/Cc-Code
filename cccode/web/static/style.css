@@ -46,3 +46,5 @@ main{background:#fff}header{border-color:#edf0f5;color:#2b3040}.crumb,.separator
 
 /* Readable response hierarchy on the light background. */
 .assistant-body h3,.assistant-body h4,.assistant-body h5{color:#283247;line-height:1.4;margin:20px 0 8px;font-weight:650}.assistant-body h3{font-size:1.15em}.assistant-body h4{font-size:1.06em}.assistant-body h5{font-size:1em}.assistant-body .md-line{line-height:1.75}.table-wrap{max-width:100%;overflow-x:auto;margin:10px 0 16px}.markdown-table{border-collapse:collapse;width:100%;font-size:14px;text-align:left}.markdown-table th,.markdown-table td{border:1px solid #e1e6ef;padding:8px 12px;vertical-align:top}.markdown-table th{background:#f5f7fb;color:#303c50;font-weight:600}.markdown-table td{color:#3c475a}.send.has-input:not(:disabled){background:#385eb5;color:#fff}.send.has-input:not(:disabled):hover{background:#294d9e}.send:focus-visible{outline:2px solid #385eb5;outline-offset:3px}
+
+.send.is-stopping:not(:disabled){background:#385eb5;color:#fff}.send.is-stopping:not(:disabled):hover{background:#294d9e}
