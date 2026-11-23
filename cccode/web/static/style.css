@@ -51,3 +51,6 @@ main{background:#fff}header{border-color:#edf0f5;color:#2b3040}.crumb,.separator
 
 /* Compact spacing for streamed Markdown replies. */
 .assistant-body,.assistant-body .md-line{line-height:1.6}.assistant-body .md-gap{height:8px}.assistant-body h3,.assistant-body h4,.assistant-body h5{margin:14px 0 6px}.assistant-body .md-rule{border:0;border-top:1px solid #e5e9f0;margin:14px 0}.assistant-body .code-block{margin:10px 0 12px}.assistant-body .table-wrap{margin:10px 0 12px}
+
+/* Keep paragraphs and subsections distinct without oversized blank lines. */
+.assistant-body .md-gap{height:12px}.assistant-body .md-heading{color:#283247;line-height:1.45;margin:20px 0 8px;font-weight:650}.assistant-body .md-heading:first-child{margin-top:0}.assistant-body .md-heading-1{font-size:1.2em}.assistant-body .md-heading-2{font-size:1.12em}.assistant-body .md-heading-3{font-size:1.05em}.assistant-body .md-heading-4,.assistant-body .md-heading-5,.assistant-body .md-heading-6{font-size:1em}.assistant-body .md-rule{margin:18px 0}

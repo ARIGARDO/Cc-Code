@@ -23,7 +23,7 @@ function renderMarkdown(node, text) {
     }
   };
   const cells = line => line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
-  const isBlock = line => /^\s*(?:#{1,3}\s|```|(?:-{3,}|\*{3,}|_{3,})\s*$|\|)/.test(line);
+  const isBlock = line => /^\s*(?:#{1,6}\s|```|(?:-{3,}|\*{3,}|_{3,})\s*$|\|)/.test(line);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) {
@@ -48,8 +48,8 @@ function renderMarkdown(node, text) {
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) { const row = el('tr'); cells(lines[i]).forEach(value => { const cell = el('td'); inline(cell, value); row.append(cell); }); body.append(row); i++; }
       i--; table.append(body); wrapper.append(table); node.append(wrapper); continue;
     }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
-    const row = el(heading ? 'h' + (heading[1].length + 2) : 'div', 'md-line');
+    const heading = line.match(/^ {0,3}(#{1,6})\s+(.+?)\s*$/);
+    const row = el(heading ? 'h' + Math.min(6, heading[1].length + 2) : 'div', heading ? 'md-heading md-heading-' + heading[1].length : 'md-line');
     const content = heading ? heading[2] : line;
     inline(row, content);
     node.append(row);
