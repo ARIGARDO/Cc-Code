@@ -4,7 +4,20 @@ let socket, busy = false, currentText = null, currentThinking = null, activity =
 function resetTurn() { resetText(); activity = null; tools.clear(); }
 function ensureActivity() { if (!activity) { const box = el('details', 'activity'); box.open = busy; const summary = el('summary', 'activity-summary', '思考与操作'); const body = el('div', 'activity-body'); box.append(summary, body); if (currentText) messages.insertBefore(box, currentText.parentElement); else messages.append(box); activity = {box, body}; } return activity; }
 function moveTextToActivity() { if (!currentText) return; const body = ensureActivity().body; const row = currentText.parentElement; const progress = el('div', 'activity-text'); progress.textContent = currentText.dataset.content; body.append(progress); row.remove(); currentText = null; }
-function renderSessions(data) { currentSession = data.current; const nav = $('sessions'); nav.replaceChildren(); data.sessions.forEach(session => { const button = el('button', session.id === currentSession ? 'active' : '', session.title); button.type = 'button'; button.disabled = busy; button.title = session.title; button.onclick = () => { if (!busy && session.id !== currentSession) send({type:'resume', session_id:session.id}); }; nav.append(button); if (session.id === currentSession) $('header-title').textContent = session.title; }); }
+function renderSessions(data) {
+  currentSession = data.current; const nav = $('sessions'); nav.replaceChildren();
+  data.sessions.forEach(session => {
+    const row = el('div', 'session-row');
+    const button = el('button', 'session-open' + (session.id === currentSession ? ' active' : ''), session.title);
+    button.type = 'button'; button.disabled = busy; button.title = session.title;
+    button.onclick = () => { if (!busy && session.id !== currentSession) send({type:'resume', session_id:session.id}); };
+    const remove = el('button', 'session-delete', '×'); remove.type = 'button'; remove.disabled = busy;
+    remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话：' + session.title);
+    remove.onclick = () => { if (!busy && confirm('确定删除会话“' + session.title + '”吗？此操作无法撤销。')) send({type:'delete_session', session_id:session.id}); };
+    row.append(button, remove); nav.append(row);
+    if (session.id === currentSession) $('header-title').textContent = session.title;
+  });
+}
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 function send(data) { if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); }
 function bottom() { scroll.scrollTop = scroll.scrollHeight; }

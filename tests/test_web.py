@@ -371,3 +371,54 @@ async def test_failed_model_request_preserves_completed_tool_history(tmp_path):
     assert restored.messages[1].tool_uses[0].id == 'id'
     assert restored.messages[2].tool_results[0].content == 'result'
     restored.session.close()
+
+
+@pytest.mark.asyncio
+async def test_delete_sessions_keeps_other_history_and_resets_current(tmp_path):
+    from cccode.conversation import Message
+    from cccode.memory import SessionManager
+
+    class Socket:
+        closed = False
+        def __init__(self): self.events = []
+        async def send_json(self, data): self.events.append(data)
+    class Agent:
+        def clear_active_skills(self): pass
+
+    socket = Socket()
+    runtime = server.BrowserRuntime(socket, {})
+    runtime.agent = Agent()
+    runtime.session_manager = SessionManager(tmp_path)
+    older = runtime.session_manager.create()
+    older.append(Message(role='user', content='保留的会话'))
+    older_id = older.session_id
+    older.close()
+    runtime.session = runtime.session_manager.create()
+    current_id = runtime.session.session_id
+    runtime.session.append(Message(role='user', content='当前会话'))
+    runtime.conversation.add_user_message('当前会话')
+    await runtime.delete_session('../../outside')
+    assert socket.events[-1]['type'] == 'error'
+    await runtime.delete_session(current_id)
+    assert runtime.session.session_id != current_id
+    assert runtime.conversation.history == []
+    assert any(event['type'] == 'clear' for event in socket.events)
+    assert runtime.session_manager.resume(current_id) is None
+    resumed = runtime.session_manager.resume(older_id)
+    assert resumed is not None and resumed.messages[0].content == '保留的会话'
+    resumed.session.close()
+    new_current = runtime.session.session_id
+    await runtime.delete_session(older_id)
+    assert runtime.session.session_id == new_current
+    assert runtime.session_manager.resume(older_id) is None
+    await runtime.close()
+
+
+def test_web_permission_menu_has_three_modes():
+    from cccode.permissions.modes import PermissionMode, mode_decide
+    html = (server.STATIC / 'index.html').read_text()
+    import re
+    assert re.findall(r'data-mode="([^"]+)"', html) == ['default', 'plan', 'bypassPermissions']
+    assert mode_decide(PermissionMode.DEFAULT, 'write') == 'ask'
+    assert mode_decide(PermissionMode.PLAN, 'write') == 'deny'
+    assert mode_decide(PermissionMode.BYPASS, 'write') == 'allow'

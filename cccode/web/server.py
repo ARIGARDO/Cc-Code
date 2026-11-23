@@ -94,6 +94,29 @@ class BrowserRuntime(CcCodeApp):
         await self.send("restore", messages=self.restore_messages(result.messages))
         await self.send_sessions()
 
+    async def delete_session(self, session_id: str) -> None:
+        if not self.session_manager or not any(meta.id == session_id for meta in self.session_manager.list()):
+            await self.send("error", message="找不到该会话。")
+            return
+        current = bool(self.session and self.session.session_id == session_id)
+        if current:
+            self.session.close()
+        deleted = self.session_manager.delete(session_id)
+        if current:
+            if not deleted:
+                result = self.session_manager.resume(session_id)
+                self.session = result.session if result else self.session_manager.create()
+            else:
+                self.session = self.session_manager.create()
+                self.conversation.clear()
+                if self.agent:
+                    self.agent.clear_active_skills()
+                self._mcp_reminder_injected = False
+                await self.send("clear")
+        if not deleted:
+            await self.send("error", message="删除会话失败，请检查文件权限。")
+        await self.send_sessions()
+
     def _ui_controller(self) -> Any:
         ui = super()._ui_controller()
         ui.send_user_message = lambda text: setattr(self, "command_prompt", text)
@@ -234,6 +257,8 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                         runtime.running = asyncio.create_task(runtime.process(text))
                 elif kind == "resume" and isinstance(data.get("session_id"), str) and not runtime.running:
                     await runtime.resume_session(data["session_id"])
+                elif kind == "delete_session" and isinstance(data.get("session_id"), str) and not runtime.running:
+                    await runtime.delete_session(data["session_id"])
                 elif kind == "complete" and isinstance(data.get("text"), str):
                     from cccode.commands.parser import complete
                     query = data["text"].strip()
