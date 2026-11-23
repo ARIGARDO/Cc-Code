@@ -415,7 +415,8 @@ async def test_undiscovered_mcp_tool_cannot_execute_until_toolsearch(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_agent_refreshes_name_only_catalogue_every_model_request(tmp_path):
+@pytest.mark.parametrize('protocol', ['anthropic', 'openai'])
+async def test_agent_refreshes_name_only_catalogue_every_model_request(tmp_path, protocol):
     from types import SimpleNamespace
     from cccode.agent import Agent, LoopComplete
     from cccode.conversation import ConversationManager
@@ -424,7 +425,7 @@ async def test_agent_refreshes_name_only_catalogue_every_model_request(tmp_path)
     from cccode.tools.impl.tool_search import ToolSearchTool
 
     registry = create_default_registry()
-    registry.register(ToolSearchTool(registry))
+    registry.register(ToolSearchTool(registry, protocol=protocol))
     for name in ('alpha', 'beta'):
         definition = SimpleNamespace(name=name, description='secret long description '+name, inputSchema={'type':'object','properties':{}})
         registry.register(MCPToolWrapper('fixture', definition, SimpleNamespace()))
@@ -432,7 +433,7 @@ async def test_agent_refreshes_name_only_catalogue_every_model_request(tmp_path)
     class Client:
         def __init__(self): self.requests = []
         async def stream(self, conversation, system=None, tools=None):
-            self.requests.append((conversation.serialize('anthropic'), [dict(t) for t in tools], [m.content for m in conversation.history if 'deferred tools are available' in m.content]))
+            self.requests.append((conversation.serialize(protocol), [dict(t) for t in tools], [m.content for m in conversation.history if 'deferred tools are available' in m.content]))
             if len(self.requests) == 1:
                 yield ToolCallComplete('s1', 'ToolSearch', {'query':'select:mcp_fixture_alpha'})
                 yield StreamEnd('tool_use', 1, 1)
@@ -440,7 +441,7 @@ async def test_agent_refreshes_name_only_catalogue_every_model_request(tmp_path)
                 yield StreamEnd('end_turn', 1, 1)
 
     client = Client()
-    agent = Agent(client, registry, 'anthropic', tmp_path, max_iterations=3)
+    agent = Agent(client, registry, protocol, tmp_path, max_iterations=3)
     conversation = ConversationManager()
     conversation.add_user_message('test')
     events = [event async for event in agent.run(conversation)]
