@@ -102,15 +102,20 @@ class BrowserRuntime(CcCodeApp):
     def run_worker(self, work: Any, **kwargs: Any) -> asyncio.Task:
         return asyncio.create_task(work)
 
-    async def start(self) -> None:
+    async def start(self, *, initialize_mcp: bool = True) -> None:
         await self._start_agent()
         if not self.agent:
             raise RuntimeError("未配置模型，请在 config.yaml 的 providers 中添加模型。")
         if self.hook_engine:
             from cccode.hooks import HookContext
             await self.hook_engine.run_hooks("startup", HookContext(event_name="startup"))
-        if self._mcp_server_configs:
+        if initialize_mcp and self._mcp_server_configs:
             await self._init_mcp()
+        if not initialize_mcp:
+            return
+        await self.announce_ready()
+
+    async def announce_ready(self) -> None:
         await self.send("ready", model=self._provider.model if self._provider else "", cwd=str(self._work_dir), mode=self.agent.permission_mode.value)
         await self.send_sessions()
 
@@ -243,7 +248,7 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                     candidate = BrowserRuntime(ws, {"providers": config.providers}, mcp_servers=config.mcp_servers, hook_engine=HookEngine(load_hooks(config.raw_hooks)))
                     candidate._work_dir = path
                     try:
-                        await candidate.start()
+                        await candidate.start(initialize_mcp=False)
                     except Exception:
                         logger.exception("Workspace initialization failed")
                         await candidate.close()
@@ -251,6 +256,9 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                         continue
                     await runtime.close()
                     runtime = candidate
+                    if runtime._mcp_server_configs:
+                        await runtime._init_mcp()
+                    await runtime.announce_ready()
                     await runtime.send("clear")
                 elif kind == "stop" and runtime.running:
                     runtime.running.cancel()

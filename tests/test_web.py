@@ -304,3 +304,38 @@ async def test_browser_skill_completion(monkeypatch, tmp_path):
         if not any(e['type'] == 'notice' and 'review' in e['text'] for e in events):
             assert 'review' in (await asyncio.wait_for(ws.receive_json(), 3))['text']
         await ws.close()
+
+@pytest.mark.asyncio
+async def test_workspace_switch_keeps_websocket_with_mcp(monkeypatch, tmp_path):
+    import json
+    import sys
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr('cccode.app.create_client', lambda config: object())
+    connected_projects = []
+    original_init = server.BrowserRuntime._init_mcp
+    async def checked_init(runtime):
+        await original_init(runtime)
+        assert runtime.registry.get('mcp_test_ping') is not None
+        connected_projects.append(runtime._work_dir)
+    monkeypatch.setattr(server.BrowserRuntime, '_init_mcp', checked_init)
+    mcp_script = tmp_path / 'server.py'
+    mcp_script.write_text('from mcp.server.fastmcp import FastMCP\nm = FastMCP("test")\n@m.tool()\ndef ping() -> str:\n    return "pong"\nm.run()\n')
+    (tmp_path / 'config.yaml').write_text(json.dumps({'providers': [{'protocol': 'openai', 'model': 'test-model', 'api_key': 'test'}], 'mcp_servers': [{'name': 'test', 'command': sys.executable, 'args': [str(mcp_script)]}]}))
+    project = tmp_path / 'project'
+    project.mkdir()
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url('/')).rstrip('/')
+        ws = await client.ws_connect('/ws', headers={'Origin': origin})
+        assert (await asyncio.wait_for(ws.receive_json(), 10))['type'] == 'ready'
+        await ws.receive_json()
+        for path in (project, tmp_path):
+            await ws.send_json({'type': 'workspace', 'path': str(path)})
+            ready = await asyncio.wait_for(ws.receive_json(), 10)
+            assert ready['type'] == 'ready' and ready['cwd'] == str(path)
+            assert (await ws.receive_json())['type'] == 'sessions'
+            assert (await ws.receive_json())['type'] == 'clear'
+            await ws.send_json({'type': 'complete', 'text': '/sk'})
+            assert (await asyncio.wait_for(ws.receive_json(), 5))['type'] == 'completions'
+        assert connected_projects == [tmp_path, project, tmp_path]
+        await ws.close()
