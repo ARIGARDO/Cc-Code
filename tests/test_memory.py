@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 from pathlib import Path
+import pytest
 
 
 from cccode.conversation import (
@@ -375,6 +376,10 @@ class TestTimeGapMessage:
 # ──────────────────────────────────────────────
 
 class TestMemoryManager:
+    @pytest.fixture(autouse=True)
+    def isolate_user_memory(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
     def test_load_empty(self, tmp_path):
         mgr = MemoryManager(tmp_path)
         mgr._user_path = tmp_path / "user_memories.md"
@@ -486,3 +491,21 @@ class TestConversationInjection:
         conv.replace_history([])
         assert conv.ltm_injected is False
         assert conv.env_injected is False
+
+def test_agent_prompt_directs_project_memory_to_cccode(monkeypatch, tmp_path):
+    from cccode.memory.auto_memory import MemoryManager, should_trigger_extraction
+    from cccode.prompts import build_system_prompt
+
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path / 'home')
+    project = tmp_path / 'project'
+    project.mkdir()
+    manager = MemoryManager(project)
+    manager._write_memories('### 项目知识\n- 本项目只使用 Python 标准库，用户界面使用中文')
+    prompt = build_system_prompt(work_dir=str(project))
+    assert '.cccode/memories.md' in prompt
+    assert '~/.cccode/memories.md' in prompt
+    assert '.trae/' not in prompt
+    assert manager.project_path == project / '.cccode/memories.md'
+    assert '本项目只使用 Python 标准库' in manager.load()
+    assert not (project / '.trae').exists()
+    assert should_trigger_extraction('将项目约定记录到项目记忆中')
