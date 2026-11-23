@@ -57,3 +57,5 @@ main{background:#fff}header{border-color:#edf0f5;color:#2b3040}.crumb,.separator
 
 .sessions .session-row{position:relative;display:flex;align-items:center;border-radius:7px}.sessions .session-open{min-width:0;flex:1;padding-right:34px}.sessions .session-delete{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:none;width:27px;height:27px;padding:0;border:0;border-radius:6px;text-align:center;font-size:18px;line-height:27px;background:transparent;color:#788399}.sessions .session-row:hover .session-delete,.sessions .session-row:focus-within .session-delete{display:block}.sessions .session-delete:hover{background:#dce3ef;color:#a43d3d}
 @media (hover:none){.sessions .session-delete{display:block}}
+
+.assistant .activity{margin:0 0 16px}.assistant .assistant-head{margin-bottom:12px}

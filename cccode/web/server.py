@@ -144,7 +144,7 @@ class BrowserRuntime(CcCodeApp):
         await self.announce_ready()
 
     async def announce_ready(self) -> None:
-        await self.send("ready", model=self._provider.model if self._provider else "", cwd=str(self._work_dir), mode=self.agent.permission_mode.value)
+        await self.send("ready", model=self._provider.model if self._provider else "", cwd=str(self._work_dir), mode=self.agent.permission_mode.value, capabilities=["plan_review"])
         await self.send_sessions()
 
     async def watch_questions(self) -> None:
