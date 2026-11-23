@@ -7,6 +7,7 @@ plus a factory function and a typed error hierarchy.
 from __future__ import annotations
 
 import json
+import httpx
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import Any, Optional
@@ -28,6 +29,7 @@ from cccode.tools.base import (
 # ──────────────────────────────────────────────
 
 _EPHEMERAL = {"type": "ephemeral"}
+_MODEL_TIMEOUT = httpx.Timeout(60.0, connect=15.0)
 
 
 def _mark_last_user_tail_for_cache(messages: list[dict[str, Any]]) -> None:
@@ -141,6 +143,8 @@ class AnthropicClient(LLMClient):
         self._client = anthropic.AsyncAnthropic(
             api_key=key,
             base_url=config.base_url or None,
+            timeout=_MODEL_TIMEOUT,
+            max_retries=0,
         )
         self._max_output_tokens = config.get_max_output_tokens()
 
@@ -246,8 +250,12 @@ class AnthropicClient(LLMClient):
             except (AttributeError, KeyError, TypeError, ValueError):
                 pass
             raise RateLimitError(str(e), retry_after=retry_after) from e
+        except anthropic.APITimeoutError as e:
+            raise NetworkError("模型服务连接或响应超时，已停止等待。请稍后重试。") from e
         except anthropic.APIConnectionError as e:
             raise NetworkError(str(e)) from e
+        except httpx.TimeoutException as e:
+            raise NetworkError("模型服务连接或响应超时，已停止等待。请稍后重试。") from e
         except httpx.TransportError as e:
             raise NetworkError("模型服务的流式连接中断，请检查网络或服务状态后重试。") from e
         except anthropic.APIStatusError as e:
@@ -274,6 +282,8 @@ class OpenAIClient(LLMClient):
         self._client = openai.AsyncOpenAI(
             api_key=key,
             base_url=config.base_url or None,
+            timeout=_MODEL_TIMEOUT,
+            max_retries=0,
         )
         self._max_output_tokens = config.get_max_output_tokens()
 
@@ -408,8 +418,12 @@ class OpenAIClient(LLMClient):
             except (AttributeError, KeyError, TypeError, ValueError):
                 pass
             raise RateLimitError(str(e), retry_after=retry_after) from e
+        except openai.APITimeoutError as e:
+            raise NetworkError("模型服务连接或响应超时，已停止等待。请稍后重试。") from e
         except openai.APIConnectionError as e:
             raise NetworkError(str(e)) from e
+        except httpx.TimeoutException as e:
+            raise NetworkError("模型服务连接或响应超时，已停止等待。请稍后重试。") from e
         except httpx.TransportError as e:
             raise NetworkError("模型服务的流式连接中断，请检查网络或服务状态后重试。") from e
         except openai.APIStatusError as e:

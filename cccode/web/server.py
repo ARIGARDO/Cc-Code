@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from aiohttp import WSMsgType, web
 
-from cccode.agent import PermissionRequest, PermissionResponse, LoopComplete
+from cccode.agent import PermissionRequest, PermissionResponse
 from cccode.app import CcCodeApp
 from cccode.config import load_config
 from cccode.conversation import Message
@@ -131,6 +131,7 @@ class BrowserRuntime(CcCodeApp):
 
     async def process(self, text: str) -> None:
         watcher = asyncio.create_task(self.watch_questions())
+        before: int | None = None
         try:
             await self.send("busy", busy=True)
             if text == "/new":
@@ -164,10 +165,6 @@ class BrowserRuntime(CcCodeApp):
                         await self.send("permission", tool=event.tool_name, args=event.tool_args)
                     elif is_dataclass(event):
                         await self.send("agent_event", event=type(event).__name__, data=asdict(event))
-                    if isinstance(event, LoopComplete) and self.session:
-                        for msg in self.conversation.history[before:]:
-                            if msg.role == "assistant" or (msg.role == "user" and msg.tool_results):
-                                self.session.append(msg)
         except asyncio.CancelledError:
             await self.send("notice", text="已停止运行。")
             raise
@@ -176,6 +173,13 @@ class BrowserRuntime(CcCodeApp):
             await self.send("error", message=str(exc))
         finally:
             watcher.cancel()
+            if before is not None and self.session:
+                try:
+                    for msg in self.conversation.history[before:]:
+                        if msg.role == "assistant" or (msg.role == "user" and msg.tool_results):
+                            self.session.append(msg)
+                except Exception:
+                    logger.exception("Failed to persist partial conversation")
             if self.permission and not self.permission.done():
                 self.permission.cancel()
             self.permission = None

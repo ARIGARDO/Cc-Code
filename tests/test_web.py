@@ -339,3 +339,35 @@ async def test_workspace_switch_keeps_websocket_with_mcp(monkeypatch, tmp_path):
             assert (await asyncio.wait_for(ws.receive_json(), 5))['type'] == 'completions'
         assert connected_projects == [tmp_path, project, tmp_path]
         await ws.close()
+
+
+@pytest.mark.asyncio
+async def test_failed_model_request_preserves_completed_tool_history(tmp_path):
+    from cccode.conversation import ToolUseBlock, ToolResultBlock
+    from cccode.memory import SessionManager
+    from cccode.client import NetworkError
+
+    class Socket:
+        closed = False
+        def __init__(self): self.events = []
+        async def send_json(self, data): self.events.append(data)
+    class Agent:
+        async def run(self, conversation):
+            conversation.add_assistant_message(tool_uses=[ToolUseBlock('id', 'ReadFile', {'file_path':'a'})])
+            conversation.add_tool_results_message([ToolResultBlock('id', 'result')])
+            yield ToolResultEvent('id', 'ReadFile', 'result', False)
+            raise NetworkError('模型服务连接或响应超时')
+
+    ws = Socket()
+    runtime = server.BrowserRuntime(ws, {})
+    runtime.agent = Agent()
+    runtime.session_manager = SessionManager(tmp_path)
+    runtime.session = runtime.session_manager.create()
+    session_id = runtime.session.session_id
+    await runtime.process('hello')
+    assert any(e['type'] == 'error' and '超时' in e['message'] for e in ws.events)
+    runtime.session.close()
+    restored = runtime.session_manager.resume(session_id)
+    assert restored.messages[1].tool_uses[0].id == 'id'
+    assert restored.messages[2].tool_results[0].content == 'result'
+    restored.session.close()
