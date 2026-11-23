@@ -9,17 +9,13 @@ from cccode.commands.registry import Command, CommandContext, CommandType, Comma
 
 logger = logging.getLogger(__name__)
 
-_REGISTERED_SKILL_NAMES: set[str] = set()
-
-
 def register_skill_commands(
     registry: CommandRegistry,
     skill_loader: Any,
     skill_executor: Any,
 ) -> int:
-    global _REGISTERED_SKILL_NAMES
-
-    for name in list(_REGISTERED_SKILL_NAMES):
+    registered = getattr(registry, "_registered_skill_names", set())
+    for name in list(registered):
         try:
             registry._commands.pop(name.lower(), None)
             for k in list(registry._alias_map.keys()):
@@ -27,7 +23,8 @@ def register_skill_commands(
                     del registry._alias_map[k]
         except Exception:
             pass
-    _REGISTERED_SKILL_NAMES.clear()
+    registered.clear()
+    registry._registered_skill_names = registered
 
     catalog = skill_loader.get_catalog()
     if not catalog:
@@ -48,20 +45,10 @@ def register_skill_commands(
         )
         try:
             registry.register_sync(cmd)
-            _REGISTERED_SKILL_NAMES.add(sname)
+            registered.add(sname)
             count += 1
         except ValueError:
-            existing = registry._commands.pop(sname.lower(), None)
-            if existing is not None:
-                for k in list(registry._alias_map.keys()):
-                    if registry._alias_map.get(k) == sname.lower():
-                        del registry._alias_map[k]
-                logger.debug("Replacing existing command '%s' with skill command", sname)
-                registry.register_sync(cmd)
-                _REGISTERED_SKILL_NAMES.add(sname)
-                count += 1
-            else:
-                logger.debug("Skipping skill command %s: conflict", sname)
+            logger.warning("Skipping skill command %s: conflict with existing command", sname)
 
     return count
 

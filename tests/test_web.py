@@ -268,3 +268,31 @@ async def test_workspace_switch_reinitializes_project(monkeypatch, tmp_path):
         await ws.send_json({'type': 'workspace', 'path': str(project / 'missing')})
         assert (await ws.receive_json())['type'] == 'error'
         await ws.close()
+
+@pytest.mark.asyncio
+async def test_browser_skill_completion(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr('cccode.app.create_client', lambda config: object())
+    (tmp_path / 'config.yaml').write_text('providers:\n  - protocol: openai\n    model: test-model\n    api_key: test\n')
+    async with TestClient(TestServer(server.create_app())) as client:
+        origin = str(client.make_url('/')).rstrip('/')
+        ws = await client.ws_connect('/ws', headers={'Origin': origin})
+        await ws.receive_json()
+        await ws.receive_json()
+        await ws.send_json({'type': 'complete', 'text': '/skill'})
+        result = await asyncio.wait_for(ws.receive_json(), 3)
+        assert result['type'] == 'completions'
+        values = [item['value'] for item in result['entries']]
+        assert '/skill' in values and '/review' in values
+        await ws.send_json({'type': 'message', 'text': '/skill'})
+        events = []
+        while True:
+            event = await asyncio.wait_for(ws.receive_json(), 3)
+            events.append(event)
+            if event['type'] == 'busy' and not event['busy']:
+                break
+        # Notices are scheduled by the existing command UI controller.
+        if not any(e['type'] == 'notice' and 'review' in e['text'] for e in events):
+            assert 'review' in (await asyncio.wait_for(ws.receive_json(), 3))['text']
+        await ws.close()

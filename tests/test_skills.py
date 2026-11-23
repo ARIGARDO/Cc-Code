@@ -459,3 +459,24 @@ class TestAgentIntegration:
         agent.clear_active_skills = MagicMock(side_effect=agent.active_skills.clear)
         agent.clear_active_skills()
         assert len(agent.active_skills) == 0
+
+def test_skill_registration_isolated_between_registries(tmp_path):
+    from types import SimpleNamespace
+    from cccode.commands.registry import Command, CommandRegistry
+    from cccode.commands.handlers.skill_register import register_skill_commands
+
+    class Loader:
+        def __init__(self, names): self.names = names
+        def get_catalog(self): return [(name, 'description') for name in self.names]
+        def get(self, name): return SimpleNamespace(name=name, mode='inline')
+
+    first, second = CommandRegistry(), CommandRegistry()
+    register_skill_commands(first, Loader(['review']), object())
+    second.register_sync(Command(name='review'))
+    register_skill_commands(second, Loader(['other']), object())
+    register_skill_commands(second, Loader([]), object())
+    assert first.find('review') is not None
+    assert second.find('review') is not None
+    register_skill_commands(first, Loader([]), object())
+    assert first.find('review') is None
+    assert second.find('review') is not None

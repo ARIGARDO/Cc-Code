@@ -62,6 +62,13 @@ async def handle_skill(ctx: CommandContext) -> None:
                 command_registry = ctx.config.get("registry")
                 if command_registry:
                     register_skill_commands(command_registry, skill_loader, skill_executor)
+            if ctx.agent:
+                catalog = skill_loader.get_catalog()
+                lines = ["You can use the following Skills:\n"] if catalog else []
+                lines.extend(f"- {name}: {description}" for name, description in catalog)
+                if lines:
+                    lines.append("\nIf the user's request matches a Skill, call LoadSkill to activate it.")
+                ctx.agent.set_skill_catalog("\n".join(lines))
             ctx.ui.add_system_message("Skill 已重新加载")
         except Exception as e:
             ctx.ui.add_system_message(f"重新加载失败: {e}")

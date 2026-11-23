@@ -225,6 +225,15 @@ async def websocket(request: web.Request) -> web.WebSocketResponse:
                         runtime.running = asyncio.create_task(runtime.process(text))
                 elif kind == "resume" and isinstance(data.get("session_id"), str) and not runtime.running:
                     await runtime.resume_session(data["session_id"])
+                elif kind == "complete" and isinstance(data.get("text"), str):
+                    from cccode.commands.parser import complete
+                    query = data["text"].strip()
+                    entries = [{"value": value, "description": "命令"} for value in complete(runtime.command_registry, query)]
+                    if query.startswith("/") and " " not in query and getattr(runtime, "skill_loader", None):
+                        prefix = query[1:].lower()
+                        skill_prefix = "" if prefix in ("skill", "skills") else prefix
+                        entries.extend({"value": "/" + name, "description": desc} for name, desc in runtime.skill_loader.get_catalog() if name.lower().startswith(skill_prefix) and runtime.command_registry.find(name))
+                    await runtime.send("completions", query=data["text"], entries=entries[:30])
                 elif kind == "workspace" and isinstance(data.get("path"), str) and not runtime.running:
                     path = Path(data["path"]).expanduser().resolve()
                     if not path.is_dir():
