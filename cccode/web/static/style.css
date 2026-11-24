@@ -59,3 +59,18 @@ main{background:#fff}header{border-color:#edf0f5;color:#2b3040}.crumb,.separator
 @media (hover:none){.sessions .session-delete{display:block}}
 
 .assistant .activity{margin:0 0 16px}.assistant .assistant-head{margin-bottom:12px}
+
+/* Soft blue and lavender accents drawn from the CcCode avatar. */
+.app-icon{border-radius:50%;background:#eef2ff}
+.sidebar{background:#f5f6fc;border-color:#e5e9f4}
+.brand-tag{color:#6f79a1;border-color:#dce2f2;background:#fafbff}
+.workspace{background:#edf1fc}.workspace:hover{background:#e4eaf9}
+.sessions button:hover,.sessions button.active{background:#e6ebfa;color:#303e65}
+.eyebrow,.suggestions b{color:#7289c8}
+.suggestions button{border-color:#e2e8f4;box-shadow:0 4px 16px #6477ad12}
+.suggestions button:hover,.new-chat:hover{background:#f6f8ff;border-color:#bbc9ea}
+.bubble{background:#edf1fd}
+.composer{border-color:#dce4f3;box-shadow:0 8px 30px #8295c319}
+.composer:focus-within{border-color:#9eafe1}
+.send.has-input:not(:disabled),.send.is-stopping:not(:disabled){background:#596fc1}
+.send.has-input:not(:disabled):hover,.send.is-stopping:not(:disabled):hover{background:#465cae}

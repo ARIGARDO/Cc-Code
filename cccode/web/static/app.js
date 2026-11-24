@@ -5,7 +5,7 @@ function resetTurn() { resetText(); activity = null; currentAssistant = null; to
 function ensureAssistant() {
   if (!currentAssistant) {
     const row = el('div', 'message assistant'); const head = el('div', 'assistant-head');
-    const avatar = el('img', 'avatar app-icon'); avatar.src = '/static/cccode-icon.png'; avatar.width = 25; avatar.height = 25; avatar.alt = '';
+    const avatar = el('img', 'avatar app-icon'); avatar.src = '/static/cccode-avatar.png'; avatar.width = 25; avatar.height = 25; avatar.alt = '';
     head.append(avatar, document.createTextNode('CcCode')); row.append(head); messages.append(row); currentAssistant = row;
   }
   return currentAssistant;
