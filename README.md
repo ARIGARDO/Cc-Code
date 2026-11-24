@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="cccode/web/static/cccode-icon.png" alt="CcCode 图标" width="96">
+  <img src="cccode/web/static/cccode-avatar.png" alt="CcCode 头像" width="120">
   <h1>CcCode</h1>
   <p>在本地工作区中使用的 AI 编程助手</p>
   <p>对话式网页界面 · 工具调用 · 权限确认 · 项目记忆</p>
